@@ -100,10 +100,10 @@
   .body-grid.three-col { grid-template-columns: 1fr 1fr 1fr; }
   .body-grid.single { grid-template-columns: 1fr; }
   .body-grid.dash-main { grid-template-columns: 2fr 1fr; align-items: stretch; }
-  .body-grid.dash-main .dash-left { display: flex; flex-direction: column; gap: 12px; }
-  .body-grid.dash-main .dash-right { display: flex; flex-direction: column; }
-  .body-grid.dash-main .dash-right .card { flex: 1; display: flex; flex-direction: column; }
-  .body-grid.dash-main .dash-right .todo-list { flex: 1; max-height: none; }
+  .body-grid.dash-main .dash-right { display: flex; flex-direction: column; gap: 12px; }
+  .body-grid.dash-main .dash-left { display: flex; flex-direction: column; }
+  .body-grid.dash-main .dash-left .card { flex: 1; display: flex; flex-direction: column; }
+  .body-grid.dash-main .dash-left .todo-list { flex: 1; max-height: none; }
 
   .todo-list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
   .todo-item {
@@ -1104,12 +1104,12 @@ function renderDashboard() {
     </div>
     <div class="body-grid dash-main">
       <div class="dash-left">
+        <div class="card"><h3>To Do</h3>${todoRows}</div>
+      </div>
+      <div class="dash-right">
         <div class="card"><h3>Recently Added Organizations</h3>${recentRows}</div>
         <div class="card"><h3>Organizations by Type</h3>${byTypeRows}</div>
         <div class="card"><h3>Opportunities by Pipeline</h3>${pipelineRows}</div>
-      </div>
-      <div class="dash-right">
-        <div class="card"><h3>To Do</h3>${todoRows}</div>
       </div>
     </div>
     <div class="mini-stats-strip">
