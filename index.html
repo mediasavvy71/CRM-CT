@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Chronic Trace CRM</title>
+<title>My CRM</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root {
@@ -269,8 +269,7 @@
 <div id="app">
   <div id="sidebar">
     <div class="brand">
-      <div class="name">Chronic Trace</div>
-      <div class="sub">CRM</div>
+      <div class="name" style="margin-bottom: 20px;">My CRM</div>
     </div>
     <nav id="nav"></nav>
     <div class="footer">Data is saved automatically in this browser.<br>Export to Excel anytime for a backup.</div>
@@ -285,7 +284,7 @@
 
 <script>
 /* ============================================================ *
- * Chronic Trace CRM — single-file, no-install desktop web app.
+ * My CRM — single-file, no-install desktop web app.
  * Open this file directly in any modern browser. All data is
  * kept in this browser's localStorage and auto-saves on every
  * change. Use "Export to Excel" (Settings) to back up your data
@@ -2612,7 +2611,7 @@ function renderSettings() {
         <p>Download a real .xlsx file with everything — Organizations, Contacts, Opportunities, Activities,
         Follow-ups, Pilot Programs, Partnerships, Grants, and Automation Rules. Keep this file somewhere safe
         (Dropbox, iCloud, an external drive) as your backup.</p>
-        <button class="btn" id="export-btn">Download ChronicTraceCRM.xlsx</button>
+        <button class="btn" id="export-btn">Download MyCRM.xlsx</button>
       </div>
       <div class="card">
         <h3>Import from Excel</h3>
@@ -2714,8 +2713,8 @@ function exportToExcel() {
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(grantRows, { header: SHEET_COLUMNS.Grants }), "Grants");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ruleRows, { header: SHEET_COLUMNS.AutomationRules }), "AutomationRules");
 
-  XLSX.writeFile(wb, "ChronicTraceCRM.xlsx");
-  showToast("Exported ChronicTraceCRM.xlsx");
+  XLSX.writeFile(wb, "MyCRM.xlsx");
+  showToast("Exported MyCRM.xlsx");
 }
 
 function importFromExcel(file) {
