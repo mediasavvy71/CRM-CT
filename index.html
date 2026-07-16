@@ -319,6 +319,7 @@ const NAV_ITEMS = [
   { name: "Pilot Programs", enabled: true },
   { name: "Partnerships", enabled: true },
   { name: "Grant Tracker", enabled: true },
+  { name: "Automations", enabled: true },
   { name: "Reports", enabled: true },
   { name: "Settings", enabled: true },
 ];
@@ -383,7 +384,7 @@ const Store = {
   _emptyState() {
     return {
       organizations: [], contacts: [], opportunities: [], activities: [],
-      followUps: [], pilots: [], partnerships: [], grants: [],
+      followUps: [], pilots: [], partnerships: [], grants: [], automationRules: [],
     };
   },
 
@@ -489,6 +490,17 @@ const Store = {
       amount: 25000, status: "Applied", deadline: plusDays(45), orgId: o1,
       notes: "Application submitted, awaiting committee review.",
     });
+
+    // Example automation rules -- added after the opportunities above are
+    // already created, so they don't retroactively fire for seed data.
+    this.addAutomationRule({
+      pipeline: "Sales", stage: "Proposal Sent", daysOffset: 7,
+      description: "Check in on proposal", enabled: true,
+    });
+    this.addAutomationRule({
+      pipeline: "Sales", stage: "Negotiation", daysOffset: 3,
+      description: "Confirm contract status", enabled: true,
+    });
   },
 
   // ================= Organizations ================= //
@@ -591,12 +603,14 @@ const Store = {
     };
     this.state.opportunities.push(opp);
     this.save();
+    this._runStageAutomation(opp, null);
     return opp.id;
   },
 
   updateOpportunity(id, data) {
     const o = this.getOpportunity(id);
     if (!o) throw new Error("Opportunity not found: " + id);
+    const previousStage = o.stage;
     const next = Object.assign({}, data);
     if (next.amount !== undefined) next.amount = parseFloat(next.amount) || 0;
     if (next.probability !== undefined) next.probability = parseFloat(next.probability) || 0;
@@ -606,6 +620,61 @@ const Store = {
       o.orgName = org ? org.name : "";
     }
     this.save();
+    if (data.stage !== undefined && data.stage !== previousStage) {
+      this._runStageAutomation(o, previousStage);
+    }
+  },
+
+  // ================= Automation ================= //
+  // "When a deal enters stage X (in pipeline Y), create a follow-up N days
+  // later" -- a simplified version of a HubSpot workflow. Rules fire when an
+  // opportunity is created directly into a matching stage, or moves into one.
+  listAutomationRules() { return this.state.automationRules.slice(); },
+  getAutomationRule(id) { return this.state.automationRules.find(r => r.id === id) || null; },
+
+  addAutomationRule(data) {
+    const rule = {
+      id: uid("RULE"), pipeline: data.pipeline && PIPELINES[data.pipeline] ? data.pipeline : "Sales",
+      stage: data.stage || "", daysOffset: parseInt(data.daysOffset) || 0,
+      description: data.description || "", enabled: data.enabled !== undefined ? !!data.enabled : true,
+      createdDate: todayStr(),
+    };
+    this.state.automationRules.push(rule);
+    this.save();
+    return rule.id;
+  },
+
+  updateAutomationRule(id, data) {
+    const r = this.getAutomationRule(id);
+    if (!r) throw new Error("Automation rule not found: " + id);
+    const next = Object.assign({}, data);
+    if (next.daysOffset !== undefined) next.daysOffset = parseInt(next.daysOffset) || 0;
+    Object.assign(r, next);
+    this.save();
+  },
+
+  deleteAutomationRule(id) {
+    this.state.automationRules = this.state.automationRules.filter(r => r.id !== id);
+    this.save();
+  },
+
+  _runStageAutomation(opp, previousStage) {
+    const matches = this.state.automationRules.filter(r =>
+      r.enabled && r.pipeline === opp.pipeline && r.stage === opp.stage
+    );
+    if (!matches.length) return;
+    const contacts = opp.orgId ? this.contactsForOrg(opp.orgId) : [];
+    const contactId = contacts.length ? contacts[0].id : "";
+    matches.forEach(rule => {
+      const due = new Date();
+      due.setDate(due.getDate() + (rule.daysOffset || 0));
+      this.addFollowUp({
+        orgId: opp.orgId, contactId,
+        dueDate: due.toISOString().slice(0, 10),
+        description: `${rule.description} — ${opp.name}`,
+        status: "Open", auto: true,
+      });
+    });
   },
 
   setOpportunityStage(id, stage) {
@@ -655,7 +724,7 @@ const Store = {
     const followUp = {
       id: uid("FUP"), orgId: data.orgId || "", contactId: data.contactId || "",
       dueDate: data.dueDate || todayStr(), description: data.description || "",
-      status: data.status || "Open", createdDate: todayStr(),
+      status: data.status || "Open", auto: !!data.auto, createdDate: todayStr(),
     };
     this.state.followUps.push(followUp);
     this.save();
@@ -884,6 +953,7 @@ function showScreen(name) {
   else if (name === "Pilot Programs") { content.innerHTML = renderPilotPrograms(); afterRenderPilotPrograms(); }
   else if (name === "Partnerships") { content.innerHTML = renderPartnerships(); afterRenderPartnerships(); }
   else if (name === "Grant Tracker") { content.innerHTML = renderGrantTracker(); afterRenderGrantTracker(); }
+  else if (name === "Automations") { content.innerHTML = renderAutomations(); afterRenderAutomations(); }
   else if (name === "Reports") { content.innerHTML = renderReports(); afterRenderReports(); }
   else if (name === "Settings") { content.innerHTML = renderSettings(); afterRenderSettings(); }
   else content.innerHTML = renderComingSoon(name);
@@ -1693,7 +1763,7 @@ function followUpGroupHtml(title, cssClass, items) {
     return `
       <div class="fu-item ${f.status === "Done" ? "done" : ""}" data-id="${f.id}">
         <input type="checkbox" class="fu-toggle" data-id="${f.id}" ${f.status === "Done" ? "checked" : ""}>
-        <span class="fu-desc">${escapeHtml(f.description)}${who ? " — " + escapeHtml(who) : ""}</span>
+        <span class="fu-desc">${f.auto ? '<span class="badge" style="background:var(--purple);margin-right:6px;" title="Created automatically by a rule">Automated</span>' : ""}${escapeHtml(f.description)}${who ? " — " + escapeHtml(who) : ""}</span>
         <span class="fu-meta">${escapeHtml(f.dueDate)}</span>
         <button class="btn tiny outline fu-edit-btn" data-id="${f.id}">Edit</button>
         <button class="btn tiny danger fu-delete-btn" data-id="${f.id}">Delete</button>
@@ -2175,6 +2245,132 @@ function openGrantModal(grantId) {
 }
 
 // ---------------------------------------------------------------- //
+// Automations
+// ---------------------------------------------------------------- //
+function renderAutomations() {
+  return `
+    <div class="header">
+      <h1>Automations</h1>
+      <p>When a deal enters a stage, automatically create a follow-up — no manual step required.</p>
+    </div>
+    <div class="toolbar">
+      <div class="spacer"></div>
+      <button class="btn" id="rule-add-btn">+ Add Rule</button>
+    </div>
+    <div style="padding:4px 28px 20px;">
+      <div class="card" style="padding:0;">
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Pipeline</th><th>Stage</th><th>Follow-up Due</th><th>Follow-up Description</th><th>Enabled</th><th></th></tr></thead>
+            <tbody id="rule-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function afterRenderAutomations() {
+  byId("rule-add-btn").addEventListener("click", () => openAutomationRuleModal(null));
+  renderAutomationTable();
+}
+
+function renderAutomationTable() {
+  const tbody = byId("rule-table-body");
+  if (!tbody) return;
+  const rules = Store.listAutomationRules();
+  tbody.innerHTML = rules.map(r => `
+    <tr data-id="${r.id}">
+      <td>${escapeHtml(r.pipeline)}</td>
+      <td><span class="badge" style="background:${stageColor(r.pipeline, r.stage)}">${escapeHtml(r.stage)}</span></td>
+      <td>${r.daysOffset} day${r.daysOffset === 1 ? "" : "s"} later</td>
+      <td>${escapeHtml(r.description)}</td>
+      <td>
+        <label class="checkbox-row" style="margin:0;">
+          <input type="checkbox" class="rule-enabled-toggle" data-id="${r.id}" ${r.enabled ? "checked" : ""}>
+        </label>
+      </td>
+      <td>
+        <button class="btn small outline rule-edit-btn" data-id="${r.id}">Edit</button>
+        <button class="btn small danger rule-delete-btn" data-id="${r.id}">Delete</button>
+      </td>
+    </tr>
+  `).join("") || `<tr><td colspan="6" class="muted-note">No automation rules yet. Add one to auto-create follow-ups when a deal reaches a stage you choose.</td></tr>`;
+
+  [...tbody.querySelectorAll(".rule-enabled-toggle")].forEach(cb => {
+    cb.addEventListener("change", () => {
+      Store.updateAutomationRule(cb.getAttribute("data-id"), { enabled: cb.checked });
+      showToast(cb.checked ? "Rule enabled." : "Rule disabled.");
+    });
+  });
+  [...tbody.querySelectorAll(".rule-edit-btn")].forEach(btn => {
+    btn.addEventListener("click", () => openAutomationRuleModal(btn.getAttribute("data-id")));
+  });
+  [...tbody.querySelectorAll(".rule-delete-btn")].forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (confirm("Delete this automation rule? Follow-ups it already created will stay.")) {
+        Store.deleteAutomationRule(btn.getAttribute("data-id"));
+        renderAutomationTable();
+        showToast("Rule deleted.");
+      }
+    });
+  });
+}
+
+function openAutomationRuleModal(ruleId) {
+  const rule = ruleId ? Store.getAutomationRule(ruleId) : null;
+  const pipeline = rule ? rule.pipeline : "Sales";
+  const pipelineOptions = PIPELINE_NAMES.map(p =>
+    `<option value="${escapeHtml(p)}" ${p === pipeline ? "selected" : ""}>${escapeHtml(p)}</option>`
+  ).join("");
+  const stageOptions = pipelineOf(pipeline).stages.map(s =>
+    `<option value="${escapeHtml(s)}" ${rule && rule.stage === s ? "selected" : ""}>${escapeHtml(s)}</option>`
+  ).join("");
+
+  byId("modal-body").innerHTML = `
+    <h2>${rule ? "Edit Automation Rule" : "Add Automation Rule"}</h2>
+    <p class="card-caption" style="margin:-4px 0 12px;">When a deal in this pipeline enters this stage, automatically create a follow-up.</p>
+    <div class="field-row">
+      <div class="field-group"><label>Pipeline</label><select id="f-pipeline">${pipelineOptions}</select></div>
+      <div class="field-group"><label>Stage</label><select id="f-stage">${stageOptions}</select></div>
+    </div>
+    <div class="field-group"><label>Create follow-up how many days later?</label><input type="number" id="f-days" min="0" value="${rule ? rule.daysOffset : 3}"></div>
+    <div class="field-group"><label>Follow-up description</label><input type="text" id="f-desc" placeholder="e.g. Check in on proposal" value="${escapeHtml(rule ? rule.description : "")}"></div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="f-enabled" ${!rule || rule.enabled ? "checked" : ""}>
+      <label for="f-enabled" style="margin:0;">Enabled</label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="modal-cancel">Cancel</button>
+      <button class="btn" id="modal-save">Save</button>
+    </div>
+  `;
+  openModal();
+
+  byId("f-pipeline").addEventListener("change", () => {
+    const stages = pipelineOf(byId("f-pipeline").value).stages;
+    byId("f-stage").innerHTML = stages.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("");
+  });
+
+  byId("modal-cancel").addEventListener("click", closeModal);
+  byId("modal-save").addEventListener("click", () => {
+    const data = {
+      pipeline: byId("f-pipeline").value,
+      stage: byId("f-stage").value,
+      daysOffset: byId("f-days").value,
+      description: byId("f-desc").value.trim(),
+      enabled: byId("f-enabled").checked,
+    };
+    if (!data.description) { alert("Follow-up description is required."); return; }
+    if (rule) Store.updateAutomationRule(rule.id, data);
+    else Store.addAutomationRule(data);
+    closeModal();
+    renderAutomationTable();
+    showToast(rule ? "Rule updated." : "Rule added.");
+  });
+}
+
+// ---------------------------------------------------------------- //
 // Reports
 // ---------------------------------------------------------------- //
 function barChartHtml(entries, opts) {
@@ -2280,8 +2476,8 @@ function renderSettings() {
       <div class="card">
         <h3>Export to Excel</h3>
         <p>Download a real .xlsx file with everything — Organizations, Contacts, Opportunities, Activities,
-        Follow-ups, Pilot Programs, Partnerships, and Grants. Keep this file somewhere safe (Dropbox, iCloud,
-        an external drive) as your backup.</p>
+        Follow-ups, Pilot Programs, Partnerships, Grants, and Automation Rules. Keep this file somewhere safe
+        (Dropbox, iCloud, an external drive) as your backup.</p>
         <button class="btn" id="export-btn">Download ChronicTraceCRM.xlsx</button>
       </div>
       <div class="card">
@@ -2319,10 +2515,11 @@ const SHEET_COLUMNS = {
   Contacts: ["ContactID","OrgID","OrgName","FirstName","LastName","Title","Email","Phone","DecisionMaker","Notes","CreatedDate","LastContactDate"],
   Opportunities: ["OppID","OrgID","OrgName","Pipeline","Name","Stage","Amount","Probability","ExpectedCloseDate","Source","Notes","CreatedDate"],
   Activities: ["ActivityID","OrgID","ContactID","OppID","Type","Date","Subject","Notes"],
-  FollowUps: ["FollowUpID","OrgID","ContactID","DueDate","Description","Status","CreatedDate"],
+  FollowUps: ["FollowUpID","OrgID","ContactID","DueDate","Description","Status","Auto","CreatedDate"],
   PilotPrograms: ["PilotID","OrgID","OrgName","Name","Status","StartDate","EndDate","ParticipantCount","TargetParticipants","Notes","MilestonesJSON","CreatedDate"],
   Partnerships: ["PartnershipID","OrgID","OrgName","Type","Status","StartDate","Notes","CreatedDate"],
   Grants: ["GrantID","Name","Funder","Amount","Status","Deadline","OrgID","OrgName","Notes","CreatedDate"],
+  AutomationRules: ["RuleID","Pipeline","Stage","DaysOffset","Description","Enabled","CreatedDate"],
 };
 
 function exportToExcel() {
@@ -2351,7 +2548,7 @@ function exportToExcel() {
   }));
   const followUpRows = Store.listFollowUps().map(f => ({
     FollowUpID: f.id, OrgID: f.orgId, ContactID: f.contactId, DueDate: f.dueDate,
-    Description: f.description, Status: f.status, CreatedDate: f.createdDate,
+    Description: f.description, Status: f.status, Auto: f.auto ? "Y" : "N", CreatedDate: f.createdDate,
   }));
   const pilotRows = Store.listPilots().map(p => ({
     PilotID: p.id, OrgID: p.orgId, OrgName: p.orgName, Name: p.name, Status: p.status,
@@ -2367,6 +2564,10 @@ function exportToExcel() {
     GrantID: g.id, Name: g.name, Funder: g.funder, Amount: g.amount, Status: g.status,
     Deadline: g.deadline, OrgID: g.orgId, OrgName: g.orgName, Notes: g.notes, CreatedDate: g.createdDate,
   }));
+  const ruleRows = Store.listAutomationRules().map(r => ({
+    RuleID: r.id, Pipeline: r.pipeline, Stage: r.stage, DaysOffset: r.daysOffset,
+    Description: r.description, Enabled: r.enabled ? "Y" : "N", CreatedDate: r.createdDate,
+  }));
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(orgRows, { header: SHEET_COLUMNS.Organizations }), "Organizations");
@@ -2377,6 +2578,7 @@ function exportToExcel() {
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pilotRows, { header: SHEET_COLUMNS.PilotPrograms }), "PilotPrograms");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(partnershipRows, { header: SHEET_COLUMNS.Partnerships }), "Partnerships");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(grantRows, { header: SHEET_COLUMNS.Grants }), "Grants");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ruleRows, { header: SHEET_COLUMNS.AutomationRules }), "AutomationRules");
 
   XLSX.writeFile(wb, "ChronicTraceCRM.xlsx");
   showToast("Exported ChronicTraceCRM.xlsx");
@@ -2402,6 +2604,7 @@ function importFromExcel(file) {
       const pilotRows = sheetRows("PilotPrograms");
       const partnershipRows = sheetRows("Partnerships");
       const grantRows = sheetRows("Grants");
+      const ruleRows = sheetRows("AutomationRules");
 
       if (!orgRows.length && !contactRows.length) {
         alert("This file doesn't have Organizations or Contacts sheets.");
@@ -2438,6 +2641,7 @@ function importFromExcel(file) {
       const followUps = followUpRows.map(r => ({
         id: String(r.FollowUpID || uid("FUP")), orgId: String(r.OrgID || ""), contactId: String(r.ContactID || ""),
         dueDate: String(r.DueDate || ""), description: r.Description || "", status: r.Status || "Open",
+        auto: String(r.Auto || "").toLowerCase().startsWith("y"),
         createdDate: String(r.CreatedDate || todayStr()),
       }));
       const pilots = pilotRows.map(r => {
@@ -2462,13 +2666,19 @@ function importFromExcel(file) {
         orgId: String(r.OrgID || ""), orgName: r.OrgName || "", notes: r.Notes || "",
         createdDate: String(r.CreatedDate || todayStr()),
       }));
+      const automationRules = ruleRows.map(r => ({
+        id: String(r.RuleID || uid("RULE")), pipeline: r.Pipeline && PIPELINES[r.Pipeline] ? r.Pipeline : "Sales",
+        stage: r.Stage || "", daysOffset: parseInt(r.DaysOffset) || 0, description: r.Description || "",
+        enabled: String(r.Enabled || "Y").toLowerCase().startsWith("y"),
+        createdDate: String(r.CreatedDate || todayStr()),
+      }));
 
       const counts = `${organizations.length} organization(s), ${contacts.length} contact(s), ${opportunities.length} opportunit(y/ies), ` +
         `${activities.length} activit(y/ies), ${followUps.length} follow-up(s), ${pilots.length} pilot(s), ` +
-        `${partnerships.length} partnership(s), ${grants.length} grant(s)`;
+        `${partnerships.length} partnership(s), ${grants.length} grant(s), ${automationRules.length} automation rule(s)`;
       if (!confirm(`Import ${counts}? This replaces all current data.`)) return;
 
-      Store.replaceAll({ organizations, contacts, opportunities, activities, followUps, pilots, partnerships, grants });
+      Store.replaceAll({ organizations, contacts, opportunities, activities, followUps, pilots, partnerships, grants, automationRules });
       showToast("Import complete.");
       refreshCurrentScreen();
     } catch (err) {

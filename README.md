@@ -45,6 +45,16 @@ Every section from the original plan is now built:
   status, start date, notes, linked to an organization.
 - **Grant Tracker** — funder, amount, status, deadline (overdue deadlines
   highlighted in red), optionally linked to an organization.
+- **Automations** — HubSpot-style workflow rules, simplified for a
+  browser app: "when a deal in [pipeline] enters [stage], create a follow-up
+  [N] days later." Rules fire the moment a deal is created into or moved
+  into a matching stage — automatically, no manual step. Auto-created
+  follow-ups show an "Automated" badge on the Follow Ups screen so you know
+  why they appeared. Two example rules are preloaded (Sales → Proposal Sent
+  → follow up in 7 days; Sales → Negotiation → follow up in 3 days).
+  This runs only while the CRM is open in your browser — it can't send
+  emails or run in the background when your computer is asleep, since
+  there's no server behind this app.
 - **Reports** — pipeline-by-stage (pick any of the 5 pipelines), revenue by
   month (Sales pipeline, closed-won), sales by month (Sales pipeline
   opportunities created), and lead sources (Sales pipeline) — all as simple
