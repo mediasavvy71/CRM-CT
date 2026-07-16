@@ -1021,6 +1021,24 @@ function goToOrganization(orgId) {
   showScreen("Organizations");
 }
 
+// Jump to the Organizations screen filtered down to one organization type —
+// used by the Dashboard's "Organizations by Type" list.
+function goToOrganizationsByType(type) {
+  orgScreenState.selectedOrgId = null;
+  orgScreenState.search = "";
+  orgScreenState.typeFilter = type;
+  showScreen("Organizations");
+}
+
+// Jump to the Pipelines screen switched to one pipeline — used by the
+// Dashboard's "Opportunities by Pipeline" list.
+function goToPipeline(pipelineName) {
+  oppScreenState.pipeline = pipelineName;
+  oppScreenState.stageFilter = "All Stages";
+  oppScreenState.search = "";
+  showScreen("Pipelines");
+}
+
 // Shared: build <option> tags for an organization dropdown
 function orgOptionsHtml(selectedId, includeNone) {
   const orgs = Store.listOrganizations();
@@ -1047,9 +1065,12 @@ function oppOptionsHtml(orgId, selectedId) {
 function renderDashboard() {
   const m = Store.dashboardMetrics();
   const byTypeRows = Object.keys(m.byType).length
-    ? Object.entries(m.byType).map(([type, count]) =>
-        `<div class="list-row"><span class="l">${escapeHtml(type)}</span><span class="r">${count}</span></div>`
-      ).join("")
+    ? Object.entries(m.byType).map(([type, count]) => `
+        <div class="list-row clickable" tabindex="0" title="View ${escapeHtml(type)} organizations"
+             onclick="goToOrganizationsByType('${escapeHtml(type)}')" onkeydown="if(event.key==='Enter')goToOrganizationsByType('${escapeHtml(type)}')">
+          <span class="l">${escapeHtml(type)}</span><span class="r">${count}</span>
+        </div>
+      `).join("")
     : `<div class="muted-note">No organizations yet.</div>`;
 
   const recentRows = m.recentOrgs.length
@@ -1061,9 +1082,12 @@ function renderDashboard() {
       `).join("")
     : `<div class="muted-note">No organizations yet.</div>`;
 
-  const pipelineRows = PIPELINE_NAMES.map(p =>
-    `<div class="list-row"><span class="l">${escapeHtml(p)}</span><span class="r">${m.oppsByPipeline[p] || 0}</span></div>`
-  ).join("");
+  const pipelineRows = PIPELINE_NAMES.map(p => `
+    <div class="list-row clickable" tabindex="0" title="View ${escapeHtml(p)} pipeline"
+         onclick="goToPipeline('${escapeHtml(p)}')" onkeydown="if(event.key==='Enter')goToPipeline('${escapeHtml(p)}')">
+      <span class="l">${escapeHtml(p)}</span><span class="r">${m.oppsByPipeline[p] || 0}</span>
+    </div>
+  `).join("");
 
   const winRateDisplay = m.winRate === null ? "—" : Math.round(m.winRate) + "%";
 
