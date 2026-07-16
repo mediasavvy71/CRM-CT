@@ -340,7 +340,7 @@ function stageColor(pipeline, stage) { return pipelineOf(pipeline).colors[stage]
 const ACTIVITY_TYPES = ["Call", "Email", "Meeting", "Demo"];
 const TODO_TYPE_COLORS = {
   "Call": "var(--primary)", "Email": "var(--accent)", "Meeting": "var(--purple)",
-  "Demo": "var(--amber)", "Follow Up": "var(--green)",
+  "Demo": "var(--amber)", "Follow Up": "var(--green)", "Task": "var(--gray)",
 };
 function todoTypeColor(typeLabel) { return TODO_TYPE_COLORS[typeLabel] || "var(--gray)"; }
 const PILOT_STATUS = ["Planning", "Active", "Completed", "Paused"];
@@ -349,6 +349,9 @@ const PARTNERSHIP_TYPES = ["Curriculum", "Clinical", "Technology", "Distribution
 const PARTNERSHIP_STATUS = ["Prospecting", "Active", "Ended"];
 const GRANT_STATUS = ["Researching", "Applied", "Awarded", "Declined"];
 const GRANT_STATUS_COLORS = { "Researching": "var(--gray)", "Applied": "var(--accent)", "Awarded": "var(--green)", "Declined": "var(--danger)" };
+const TASK_PRIORITIES = ["Low", "Medium", "High"];
+const TASK_PRIORITY_COLORS = { "Low": "var(--gray)", "Medium": "var(--amber)", "High": "var(--danger)" };
+const TASK_STATUSES = ["Open", "In Progress", "Done"];
 
 const NAV_ITEMS = [
   { name: "Dashboard", enabled: true },
@@ -357,6 +360,7 @@ const NAV_ITEMS = [
   { name: "Pipelines", enabled: true },
   { name: "Activities", enabled: true },
   { name: "Follow Ups", enabled: true },
+  { name: "Tasks", enabled: true },
   { name: "Pilot Programs", enabled: true },
   { name: "Partnerships", enabled: true },
   { name: "Grant Tracker", enabled: true },
@@ -432,7 +436,7 @@ const Store = {
   _emptyState() {
     return {
       organizations: [], contacts: [], opportunities: [], activities: [],
-      followUps: [], pilots: [], partnerships: [], grants: [], automationRules: [],
+      followUps: [], pilots: [], partnerships: [], grants: [], automationRules: [], tasks: [],
     };
   },
 
@@ -539,6 +543,19 @@ const Store = {
       notes: "Application submitted, awaiting committee review.",
     });
 
+    this.addTask({
+      title: "Prepare Q3 board deck", dueDate: minusDays(1), priority: "High",
+      status: "Open", assignee: "Sam",
+    });
+    this.addTask({
+      title: "Update pilot budget template", dueDate: plusDays(3), priority: "Medium",
+      status: "Open", assignee: "", orgId: o1,
+    });
+    this.addTask({
+      title: "Renew CRM export backup reminder", dueDate: plusDays(14), priority: "Low",
+      status: "Open", assignee: "",
+    });
+
     // Example automation rules -- added after the opportunities above are
     // already created, so they don't retroactively fire for seed data.
     this.addAutomationRule({
@@ -592,6 +609,7 @@ const Store = {
     unlink(this.state.pilots, "orgId", "orgName");
     unlink(this.state.partnerships, "orgId", "orgName");
     unlink(this.state.grants, "orgId", "orgName");
+    unlink(this.state.tasks, "orgId");
     this.save();
   },
 
@@ -629,6 +647,7 @@ const Store = {
     this.state.contacts = this.state.contacts.filter(c => c.id !== id);
     this.state.activities.forEach(a => { if (a.contactId === id) a.contactId = ""; });
     this.state.followUps.forEach(f => { if (f.contactId === id) f.contactId = ""; });
+    this.state.tasks.forEach(t => { if (t.contactId === id) t.contactId = ""; });
     this.save();
   },
 
@@ -798,6 +817,46 @@ const Store = {
     this.save();
   },
 
+  // ================= Tasks ================= //
+  // General internal work tasks -- distinct from Follow Ups (which are
+  // dated reminders tied to a deal/org) and Activities (a log of past
+  // contact). Tasks are optionally linked to an org/contact/opportunity
+  // but don't have to be.
+  listTasks() { return this.state.tasks.slice(); },
+  getTask(id) { return this.state.tasks.find(t => t.id === id) || null; },
+
+  addTask(data) {
+    const task = {
+      id: uid("TSK"), title: data.title || "", priority: TASK_PRIORITIES.includes(data.priority) ? data.priority : "Medium",
+      status: TASK_STATUSES.includes(data.status) ? data.status : "Open",
+      dueDate: data.dueDate || "", assignee: data.assignee || "",
+      orgId: data.orgId || "", contactId: data.contactId || "", oppId: data.oppId || "",
+      notes: data.notes || "", createdDate: todayStr(),
+    };
+    this.state.tasks.push(task);
+    this.save();
+    return task.id;
+  },
+
+  updateTask(id, data) {
+    const t = this.getTask(id);
+    if (!t) throw new Error("Task not found: " + id);
+    Object.assign(t, data);
+    this.save();
+  },
+
+  toggleTaskDone(id) {
+    const t = this.getTask(id);
+    if (!t) return;
+    t.status = t.status === "Done" ? "Open" : "Done";
+    this.save();
+  },
+
+  deleteTask(id) {
+    this.state.tasks = this.state.tasks.filter(t => t.id !== id);
+    this.save();
+  },
+
   // ================= Pilot Programs ================= //
   listPilots() { return this.state.pilots.slice(); },
   getPilot(id) { return this.state.pilots.find(p => p.id === id) || null; },
@@ -964,6 +1023,7 @@ let orgScreenState = { search: "", typeFilter: "All Types", selectedOrgId: null 
 let contactScreenState = { search: "" };
 let oppScreenState = { view: "kanban", search: "", pipeline: "Sales", stageFilter: "All Stages" };
 let activityScreenState = { search: "", typeFilter: "All Types" };
+let taskScreenState = { priorityFilter: "All Priorities" };
 let pilotScreenState = {};
 let partnershipScreenState = { search: "" };
 let grantScreenState = { search: "" };
@@ -998,6 +1058,7 @@ function showScreen(name) {
   else if (name === "Pipelines") { content.innerHTML = renderOpportunities(); afterRenderOpportunities(); }
   else if (name === "Activities") { content.innerHTML = renderActivities(); afterRenderActivities(); }
   else if (name === "Follow Ups") { content.innerHTML = renderFollowUps(); afterRenderFollowUps(); }
+  else if (name === "Tasks") { content.innerHTML = renderTasks(); afterRenderTasks(); }
   else if (name === "Pilot Programs") { content.innerHTML = renderPilotPrograms(); afterRenderPilotPrograms(); }
   else if (name === "Partnerships") { content.innerHTML = renderPartnerships(); afterRenderPartnerships(); }
   else if (name === "Grant Tracker") { content.innerHTML = renderGrantTracker(); afterRenderGrantTracker(); }
@@ -1136,8 +1197,14 @@ function buildTodoListHtml() {
       dueDate: f.dueDate, label: f.description || "Follow up", typeLabel: "Follow Up",
       orgId: f.orgId, contactId: f.contactId, screen: "Follow Ups",
     }));
+  const taskItems = Store.listTasks()
+    .filter(t => t.status !== "Done")
+    .map(t => ({
+      dueDate: t.dueDate, label: t.title || "Task", typeLabel: "Task",
+      orgId: t.orgId, contactId: t.contactId, screen: "Tasks",
+    }));
 
-  const items = activityItems.concat(followUpItems)
+  const items = activityItems.concat(followUpItems, taskItems)
     .filter(item => !!item.dueDate)
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
     .slice(0, 10);
@@ -1992,6 +2059,168 @@ function openFollowUpModal(followUpId) {
 }
 
 // ---------------------------------------------------------------- //
+// Tasks
+// ---------------------------------------------------------------- //
+// General internal work tasks. Unlike Follow Ups (dated reminders tied to
+// a deal/org) these don't have to be linked to anything -- just a title,
+// due date, priority, status, and optional assignee/org/contact/opportunity.
+function renderTasks() {
+  const priorityOptions = ["All Priorities", ...TASK_PRIORITIES]
+    .map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join("");
+  return `
+    <div class="header">
+      <h1>Tasks</h1>
+      <p>General work to-dos -- not tied to a specific deal or pipeline stage.</p>
+    </div>
+    <div class="toolbar">
+      <select id="task-priority-filter">${priorityOptions}</select>
+      <div class="spacer"></div>
+      <button class="btn" id="task-add-btn">+ Add Task</button>
+    </div>
+    <div id="task-body"></div>
+  `;
+}
+
+function afterRenderTasks() {
+  byId("task-priority-filter").value = taskScreenState.priorityFilter;
+  byId("task-priority-filter").addEventListener("change", e => {
+    taskScreenState.priorityFilter = e.target.value;
+    renderTaskBody();
+  });
+  byId("task-add-btn").addEventListener("click", () => openTaskModal(null));
+  renderTaskBody();
+}
+
+function filteredTasks() {
+  let tasks = Store.listTasks();
+  if (taskScreenState.priorityFilter && taskScreenState.priorityFilter !== "All Priorities") {
+    tasks = tasks.filter(t => t.priority === taskScreenState.priorityFilter);
+  }
+  return tasks;
+}
+
+function taskGroupHtml(title, cssClass, items) {
+  if (!items.length) return "";
+  const rows = items.map(t => {
+    const org = t.orgId ? Store.getOrganization(t.orgId) : null;
+    const contact = t.contactId ? Store.getContact(t.contactId) : null;
+    const opp = t.oppId ? Store.getOpportunity(t.oppId) : null;
+    const who = [org ? org.name : "", contact ? contact.firstName + " " + contact.lastName : "", opp ? opp.name : ""]
+      .filter(Boolean).join(" · ");
+    return `
+      <div class="fu-item ${t.status === "Done" ? "done" : ""}" data-id="${t.id}">
+        <input type="checkbox" class="task-toggle" data-id="${t.id}" ${t.status === "Done" ? "checked" : ""}>
+        <span class="fu-desc">
+          <span class="badge" style="background:${TASK_PRIORITY_COLORS[t.priority] || "var(--gray)"};margin-right:6px;">${escapeHtml(t.priority)}</span>
+          ${escapeHtml(t.title)}${who ? " — " + escapeHtml(who) : ""}${t.assignee ? ` <span class="fu-meta">(${escapeHtml(t.assignee)})</span>` : ""}
+        </span>
+        <span class="fu-meta">${escapeHtml(t.dueDate || "No due date")}</span>
+        <button class="btn tiny outline task-edit-btn" data-id="${t.id}">Edit</button>
+        <button class="btn tiny danger task-delete-btn" data-id="${t.id}">Delete</button>
+      </div>
+    `;
+  }).join("");
+  return `
+    <div class="fu-group-title ${cssClass}"><span>${title}</span><span class="count-pill">${items.length}</span></div>
+    <div class="fu-list">${rows}</div>
+  `;
+}
+
+function renderTaskBody() {
+  const el = byId("task-body");
+  if (!el) return;
+  const today = todayStr();
+  const all = filteredTasks().slice().sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || ""));
+  const open = all.filter(t => t.status !== "Done");
+  const done = all.filter(t => t.status === "Done");
+  const overdue = open.filter(t => t.dueDate && t.dueDate < today);
+  const dueToday = open.filter(t => t.dueDate === today);
+  const upcoming = open.filter(t => t.dueDate && t.dueDate > today);
+  const noDate = open.filter(t => !t.dueDate);
+
+  el.innerHTML =
+    taskGroupHtml("Overdue", "overdue", overdue) +
+    taskGroupHtml("Due Today", "today", dueToday) +
+    taskGroupHtml("Upcoming", "", upcoming.concat(noDate)) +
+    taskGroupHtml("Done", "", done) +
+    (all.length === 0 ? `<div class="muted-note" style="padding:0 28px;">No tasks match.</div>` : "");
+
+  [...el.querySelectorAll(".task-toggle")].forEach(cb => {
+    cb.addEventListener("change", () => {
+      Store.toggleTaskDone(cb.getAttribute("data-id"));
+      renderTaskBody();
+      showToast("Task updated.");
+    });
+  });
+  [...el.querySelectorAll(".task-edit-btn")].forEach(btn => {
+    btn.addEventListener("click", () => openTaskModal(btn.getAttribute("data-id")));
+  });
+  [...el.querySelectorAll(".task-delete-btn")].forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (confirm("Delete this task?")) {
+        Store.deleteTask(btn.getAttribute("data-id"));
+        renderTaskBody();
+        showToast("Task deleted.");
+      }
+    });
+  });
+}
+
+function openTaskModal(taskId) {
+  const t = taskId ? Store.getTask(taskId) : null;
+  const priorityOptions = TASK_PRIORITIES.map(p =>
+    `<option value="${escapeHtml(p)}" ${t && t.priority === p ? "selected" : ""}>${escapeHtml(p)}</option>`
+  ).join("");
+  const statusOptions = TASK_STATUSES.map(s =>
+    `<option value="${escapeHtml(s)}" ${t && t.status === s ? "selected" : (!t && s === "Open" ? "selected" : "")}>${escapeHtml(s)}</option>`
+  ).join("");
+
+  byId("modal-body").innerHTML = `
+    <h2>${t ? "Edit Task" : "Add Task"}</h2>
+    <div class="field-group"><label>Title</label><input type="text" id="t-title" value="${escapeHtml(t ? t.title : "")}"></div>
+    <div class="field-group"><label>Due Date</label><input type="date" id="t-due" value="${escapeHtml(t ? t.dueDate : "")}"></div>
+    <div class="field-group"><label>Priority</label><select id="t-priority">${priorityOptions}</select></div>
+    <div class="field-group"><label>Status</label><select id="t-status">${statusOptions}</select></div>
+    <div class="field-group"><label>Assignee</label><input type="text" id="t-assignee" placeholder="(Optional)" value="${escapeHtml(t ? t.assignee : "")}"></div>
+    <div class="field-group"><label>Organization</label><select id="t-org">${orgOptionsHtml(t ? t.orgId : "", true)}</select></div>
+    <div class="field-group"><label>Contact</label><select id="t-contact">${contactOptionsHtml(t ? t.orgId : "", t ? t.contactId : "")}</select></div>
+    <div class="field-group"><label>Opportunity</label><select id="t-opp">${oppOptionsHtml(t ? t.orgId : "", t ? t.oppId : "")}</select></div>
+    <div class="field-group"><label>Notes</label><textarea id="t-notes" rows="2">${escapeHtml(t ? t.notes : "")}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="modal-cancel">Cancel</button>
+      <button class="btn" id="modal-save">Save</button>
+    </div>
+  `;
+  openModal();
+
+  byId("t-org").addEventListener("change", () => {
+    byId("t-contact").innerHTML = contactOptionsHtml(byId("t-org").value, "");
+    byId("t-opp").innerHTML = oppOptionsHtml(byId("t-org").value, "");
+  });
+
+  byId("modal-cancel").addEventListener("click", closeModal);
+  byId("modal-save").addEventListener("click", () => {
+    const data = {
+      title: byId("t-title").value.trim(),
+      dueDate: byId("t-due").value || "",
+      priority: byId("t-priority").value,
+      status: byId("t-status").value,
+      assignee: byId("t-assignee").value.trim(),
+      orgId: byId("t-org").value,
+      contactId: byId("t-contact").value,
+      oppId: byId("t-opp").value,
+      notes: byId("t-notes").value.trim(),
+    };
+    if (!data.title) { alert("Title is required."); return; }
+    if (t) Store.updateTask(t.id, data);
+    else Store.addTask(data);
+    closeModal();
+    renderTaskBody();
+    showToast(t ? "Task updated." : "Task added.");
+  });
+}
+
+// ---------------------------------------------------------------- //
 // Pilot Programs
 // ---------------------------------------------------------------- //
 function renderPilotPrograms() {
@@ -2609,7 +2838,7 @@ function renderSettings() {
       <div class="card">
         <h3>Export to Excel</h3>
         <p>Download a real .xlsx file with everything — Organizations, Contacts, Opportunities, Activities,
-        Follow-ups, Pilot Programs, Partnerships, Grants, and Automation Rules. Keep this file somewhere safe
+        Follow-ups, Tasks, Pilot Programs, Partnerships, Grants, and Automation Rules. Keep this file somewhere safe
         (Dropbox, iCloud, an external drive) as your backup.</p>
         <button class="btn" id="export-btn">Download MyCRM.xlsx</button>
       </div>
@@ -2653,6 +2882,7 @@ const SHEET_COLUMNS = {
   Partnerships: ["PartnershipID","OrgID","OrgName","Type","Status","StartDate","Notes","CreatedDate"],
   Grants: ["GrantID","Name","Funder","Amount","Status","Deadline","OrgID","OrgName","Notes","CreatedDate"],
   AutomationRules: ["RuleID","Pipeline","Stage","DaysOffset","Description","Enabled","CreatedDate"],
+  Tasks: ["TaskID","Title","DueDate","Priority","Status","Assignee","OrgID","ContactID","OppID","Notes","CreatedDate"],
 };
 
 function exportToExcel() {
@@ -2701,6 +2931,11 @@ function exportToExcel() {
     RuleID: r.id, Pipeline: r.pipeline, Stage: r.stage, DaysOffset: r.daysOffset,
     Description: r.description, Enabled: r.enabled ? "Y" : "N", CreatedDate: r.createdDate,
   }));
+  const taskRows = Store.listTasks().map(t => ({
+    TaskID: t.id, Title: t.title, DueDate: t.dueDate, Priority: t.priority, Status: t.status,
+    Assignee: t.assignee, OrgID: t.orgId, ContactID: t.contactId, OppID: t.oppId,
+    Notes: t.notes, CreatedDate: t.createdDate,
+  }));
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(orgRows, { header: SHEET_COLUMNS.Organizations }), "Organizations");
@@ -2712,6 +2947,7 @@ function exportToExcel() {
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(partnershipRows, { header: SHEET_COLUMNS.Partnerships }), "Partnerships");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(grantRows, { header: SHEET_COLUMNS.Grants }), "Grants");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ruleRows, { header: SHEET_COLUMNS.AutomationRules }), "AutomationRules");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(taskRows, { header: SHEET_COLUMNS.Tasks }), "Tasks");
 
   XLSX.writeFile(wb, "MyCRM.xlsx");
   showToast("Exported MyCRM.xlsx");
@@ -2738,6 +2974,7 @@ function importFromExcel(file) {
       const partnershipRows = sheetRows("Partnerships");
       const grantRows = sheetRows("Grants");
       const ruleRows = sheetRows("AutomationRules");
+      const taskRows = sheetRows("Tasks");
 
       if (!orgRows.length && !contactRows.length) {
         alert("This file doesn't have Organizations or Contacts sheets.");
@@ -2805,13 +3042,21 @@ function importFromExcel(file) {
         enabled: String(r.Enabled || "Y").toLowerCase().startsWith("y"),
         createdDate: String(r.CreatedDate || todayStr()),
       }));
+      const tasks = taskRows.map(r => ({
+        id: String(r.TaskID || uid("TSK")), title: r.Title || "", dueDate: String(r.DueDate || ""),
+        priority: TASK_PRIORITIES.includes(r.Priority) ? r.Priority : "Medium",
+        status: TASK_STATUSES.includes(r.Status) ? r.Status : "Open",
+        assignee: r.Assignee || "", orgId: String(r.OrgID || ""), contactId: String(r.ContactID || ""),
+        oppId: String(r.OppID || ""), notes: r.Notes || "", createdDate: String(r.CreatedDate || todayStr()),
+      }));
 
       const counts = `${organizations.length} organization(s), ${contacts.length} contact(s), ${opportunities.length} opportunit(y/ies), ` +
         `${activities.length} activit(y/ies), ${followUps.length} follow-up(s), ${pilots.length} pilot(s), ` +
-        `${partnerships.length} partnership(s), ${grants.length} grant(s), ${automationRules.length} automation rule(s)`;
+        `${partnerships.length} partnership(s), ${grants.length} grant(s), ${automationRules.length} automation rule(s), ` +
+        `${tasks.length} task(s)`;
       if (!confirm(`Import ${counts}? This replaces all current data.`)) return;
 
-      Store.replaceAll({ organizations, contacts, opportunities, activities, followUps, pilots, partnerships, grants, automationRules });
+      Store.replaceAll({ organizations, contacts, opportunities, activities, followUps, pilots, partnerships, grants, automationRules, tasks });
       showToast("Import complete.");
       refreshCurrentScreen();
     } catch (err) {

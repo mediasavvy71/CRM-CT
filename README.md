@@ -15,12 +15,12 @@ offline.
 
 Every section from the original plan is now built:
 
-- **Dashboard** — total organizations, contacts, decision makers, total
-  pipeline, expected (weighted) revenue, and win rate (Sales pipeline),
-  organizations by type, opportunities by pipeline, a **To Do** list
-  combining overdue/upcoming activities and open follow-ups (sorted oldest/
-  most-overdue first, overdue items in red), activities/follow-ups due today
-  and overdue counts, recently added organizations.
+- **Dashboard** — total pipeline, expected (weighted) revenue, and win rate
+  (Sales pipeline), a **To Do** list combining overdue/upcoming activities,
+  open follow-ups, and open tasks (sorted oldest/most-overdue first, overdue
+  items shown as "N days overdue"), recently added organizations,
+  organizations by type, and opportunities by pipeline. Organization/contact/
+  decision-maker totals are shown as a small stats strip at the bottom.
 - **Organizations** — searchable/filterable table, add/edit/delete, notes,
   detail panel showing linked contacts and opportunities.
 - **Contacts** — searchable table, add/edit/delete, linked to an
@@ -40,6 +40,12 @@ Every section from the original plan is now built:
   organization, contact, and optionally an opportunity.
 - **Follow Ups** — grouped into Overdue, Due Today, Upcoming, and Done, with
   a one-click checkbox to mark complete.
+- **Tasks** — general work to-dos, separate from Follow Ups: title, due
+  date, priority (Low/Medium/High), status (Open/In Progress/Done), an
+  optional assignee, and an optional link to an organization, contact, or
+  opportunity. Grouped the same way as Follow Ups (Overdue/Due Today/
+  Upcoming/Done) with a filter by priority. Open tasks also show up in the
+  Dashboard's To Do list.
 - **Pilot Programs** — cards showing status, participant count vs. target
   with a progress bar, start/end dates, and a milestone checklist you can
   add to, check off, or remove.
@@ -67,9 +73,10 @@ Every section from the original plan is now built:
   in, or clear and reset to sample data.
 
 Sample data is preloaded (3 organizations, 3 contacts, 8 opportunities spread
-across all 5 pipelines, activities, follow-ups, one pilot program with
-milestones, one partnership, one grant) so you can see how everything looks
-and connects. Clear it from Settings whenever you're ready for real data.
+across all 5 pipelines, activities, follow-ups, 3 tasks, one pilot program
+with milestones, one partnership, one grant) so you can see how everything
+looks and connects. Clear it from Settings whenever you're ready for real
+data.
 
 If you have data saved from an earlier version of this CRM (before
 pipelines existed), it loads in fine — every existing opportunity is
