@@ -1,0 +1,2524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chronic Trace CRM</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --primary: #1F2A44;
+    --primary-hover: #2C3B5F;
+    --accent: #3B82F6;
+    --accent-hover: #2563EB;
+    --danger: #DC2626;
+    --danger-hover: #B91C1C;
+    --bg: #F4F6FA;
+    --card: #FFFFFF;
+    --muted: #6B7280;
+    --border: #E5E7EB;
+    --green: #10B981;
+    --amber: #F59E0B;
+    --purple: #8B5CF6;
+    --gray: #9CA3AF;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg); color: var(--primary);
+  }
+  #app { display: flex; height: 100vh; }
+
+  /* Sidebar */
+  #sidebar {
+    width: 220px; flex-shrink: 0; background: var(--primary);
+    color: white; display: flex; flex-direction: column; padding: 24px 0;
+    overflow-y: auto;
+  }
+  #sidebar .brand { padding: 0 20px 4px; }
+  #sidebar .brand .name { font-size: 20px; font-weight: 700; }
+  #sidebar .brand .sub { font-size: 13px; color: #93A3C4; margin-bottom: 20px; }
+  #sidebar nav { display: flex; flex-direction: column; gap: 2px; padding: 0 12px; }
+  #sidebar nav button {
+    all: unset; cursor: pointer; padding: 9px 12px; border-radius: 6px;
+    font-size: 14px; color: white; display: block;
+  }
+  #sidebar nav button:hover { background: var(--primary-hover); }
+  #sidebar nav button.active { background: var(--primary-hover); }
+  #sidebar .footer {
+    margin-top: auto; padding: 16px 20px 0; font-size: 10px; color: #5B6B8C; line-height: 1.4;
+  }
+
+  /* Content */
+  #content { flex: 1; overflow-y: auto; }
+  .header { padding: 24px 28px 8px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .header h1 { margin: 0; font-size: 24px; font-weight: 700; }
+  .header p { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+
+  .toolbar { display: flex; gap: 8px; padding: 0 28px 8px; align-items: center; flex-wrap: wrap; }
+  .toolbar .spacer { flex: 1; }
+
+  input[type=text], input[type=search], input[type=email], input[type=tel], input[type=url],
+  input[type=number], input[type=date], select, textarea {
+    font-family: inherit; font-size: 13px; padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: 6px; background: white; color: var(--primary);
+  }
+  textarea { resize: vertical; width: 100%; }
+
+  button.btn {
+    all: unset; cursor: pointer; font-size: 13px; font-weight: 600; padding: 8px 14px;
+    border-radius: 6px; color: white; background: var(--accent); text-align: center;
+  }
+  button.btn:hover { background: var(--accent-hover); }
+  button.btn.secondary { background: #9CA3AF; }
+  button.btn.secondary:hover { background: #6B7280; }
+  button.btn.danger { background: var(--danger); }
+  button.btn.danger:hover { background: var(--danger-hover); }
+  button.btn.small { padding: 6px 10px; font-size: 12px; }
+  button.btn.tiny { padding: 3px 7px; font-size: 11px; }
+  button.btn.outline { background: white; color: var(--primary); border: 1px solid var(--border); }
+  button.btn.outline:hover { background: #F0F2F6; }
+  button.btn.toggle-off { background: white; color: var(--muted); border: 1px solid var(--border); }
+
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 8px 28px; }
+  .metric-card {
+    background: var(--card); border-radius: 10px; padding: 16px 18px;
+  }
+  .metric-card .value { font-size: 26px; font-weight: 700; }
+  .metric-card .label { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+  .body-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 12px 28px 20px; align-items: start;
+  }
+  .body-grid.orgs-grid { grid-template-columns: 3fr 2fr; }
+
+  .card { background: var(--card); border-radius: 10px; padding: 14px 16px; }
+  .card h3 { margin: 0 0 8px; font-size: 15px; font-weight: 700; }
+  .list-row {
+    display: flex; justify-content: space-between; padding: 3px 0; font-size: 13px;
+  }
+  .list-row .l { color: var(--muted); }
+  .list-row .r { font-weight: 600; }
+  .muted-note { color: var(--muted); font-size: 13px; padding: 8px 0; }
+
+  table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.data-table th {
+    text-align: left; font-weight: 700; padding: 8px 10px; border-bottom: 2px solid var(--border);
+    background: #FAFBFD; position: sticky; top: 0;
+  }
+  table.data-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); }
+  table.data-table tbody tr { cursor: pointer; }
+  table.data-table tbody tr:hover { background: #F5F7FB; }
+  table.data-table tbody tr.selected { background: #E7EEFF; }
+  .table-wrap { max-height: 520px; overflow-y: auto; border-radius: 8px; }
+
+  .detail-empty { color: var(--muted); font-size: 13px; padding: 20px 4px; }
+  .detail-title { font-size: 17px; font-weight: 700; margin-bottom: 8px; }
+  .detail-actions { display: flex; gap: 8px; margin-bottom: 10px; }
+  .detail-field { display: flex; padding: 2px 0; font-size: 12px; }
+  .detail-field .label { width: 100px; color: var(--muted); flex-shrink: 0; }
+  .detail-field .value { color: var(--primary); }
+  .detail-section-title { font-size: 13px; font-weight: 700; margin: 12px 0 4px; }
+  .notes-box {
+    background: var(--bg); border-radius: 6px; padding: 8px 10px; font-size: 12px;
+    white-space: pre-wrap; min-height: 30px;
+  }
+  .contact-mini-row { display: flex; justify-content: space-between; padding: 2px 0; font-size: 12px; }
+
+  /* Badges */
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 100px; font-size: 11px;
+    font-weight: 700; color: white; white-space: nowrap;
+  }
+
+  /* Kanban */
+  .kanban-board { display: flex; gap: 12px; padding: 4px 28px 20px; overflow-x: auto; align-items: flex-start; }
+  .kanban-col { flex: 1 0 210px; min-width: 210px; background: #EEF1F7; border-radius: 10px; padding: 10px; max-height: 640px; display: flex; flex-direction: column; }
+  .kanban-col-header { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700; margin-bottom: 8px; padding: 0 2px; }
+  .kanban-col-header .count { background: white; border-radius: 100px; padding: 1px 8px; font-size: 11px; color: var(--muted); }
+  .kanban-cards { overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+  .kanban-card { background: white; border-radius: 8px; padding: 10px; font-size: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.06); cursor: pointer; }
+  .kanban-card .name { font-weight: 700; margin-bottom: 2px; }
+  .kanban-card .org { color: var(--muted); margin-bottom: 6px; }
+  .kanban-card .amount { font-weight: 700; color: var(--accent); }
+  .kanban-card .prob { color: var(--muted); float: right; }
+  .kanban-card select { width: 100%; margin-top: 6px; font-size: 11px; padding: 4px 6px; }
+  .kanban-card-actions { display: flex; gap: 6px; margin-top: 6px; }
+
+  .forecast-bar { display: flex; gap: 12px; padding: 0 28px 12px; flex-wrap: wrap; }
+  .forecast-chip { background: var(--card); border-radius: 8px; padding: 10px 16px; font-size: 12px; }
+  .forecast-chip .v { font-size: 18px; font-weight: 700; display: block; }
+
+  .pipeline-tabs { display: flex; gap: 6px; padding: 0 28px 10px; flex-wrap: wrap; }
+  .card-caption { font-size: 11px; color: var(--muted); margin: -4px 0 8px; }
+
+  /* Progress bar */
+  .progress-track { background: var(--bg); border-radius: 100px; height: 8px; overflow: hidden; margin: 4px 0; }
+  .progress-fill { background: var(--accent); height: 100%; border-radius: 100px; }
+
+  /* Milestones */
+  .milestone-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12px; }
+  .milestone-row.done .m-title { text-decoration: line-through; color: var(--muted); }
+  .milestone-row .m-title { flex: 1; }
+  .milestone-row .m-date { color: var(--muted); font-size: 11px; }
+
+  /* Pilot cards */
+  .pilot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; padding: 4px 28px 20px; }
+  .pilot-card { background: var(--card); border-radius: 10px; padding: 14px 16px; }
+  .pilot-card .top-row { display: flex; justify-content: space-between; align-items: flex-start; }
+  .pilot-card .name { font-weight: 700; font-size: 14px; }
+  .pilot-card .org { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+  .pilot-card .stat-line { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .pilot-card .actions { display: flex; gap: 6px; margin-top: 10px; }
+
+  /* Follow-up groups */
+  .fu-group-title { font-size: 13px; font-weight: 700; padding: 12px 28px 4px; display: flex; align-items: center; gap: 8px; }
+  .fu-group-title .count-pill { background: var(--border); border-radius: 100px; padding: 1px 8px; font-size: 11px; color: var(--primary); }
+  .fu-group-title.overdue .count-pill { background: #FEE2E2; color: var(--danger); }
+  .fu-group-title.today .count-pill { background: #FEF3C7; color: #92400E; }
+  .fu-list { padding: 0 28px; display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+  .fu-item { background: var(--card); border-radius: 8px; padding: 10px 12px; display: flex; align-items: center; gap: 10px; font-size: 13px; }
+  .fu-item.done { opacity: 0.6; }
+  .fu-item.done .fu-desc { text-decoration: line-through; }
+  .fu-item .fu-desc { flex: 1; }
+  .fu-item .fu-meta { color: var(--muted); font-size: 11px; white-space: nowrap; }
+  .fu-item input[type=checkbox] { width: 16px; height: 16px; }
+
+  /* Reports */
+  .report-section { padding: 0 28px 20px; }
+  .chart-row { display: flex; align-items: center; gap: 10px; margin: 8px 0; font-size: 12px; }
+  .chart-row .chart-label { width: 130px; flex-shrink: 0; color: var(--muted); }
+  .chart-row .chart-track { flex: 1; background: var(--bg); border-radius: 6px; height: 18px; overflow: hidden; }
+  .chart-row .chart-fill { background: var(--accent); height: 100%; border-radius: 6px; }
+  .chart-row .chart-value { width: 90px; text-align: right; font-weight: 600; flex-shrink: 0; }
+  .reports-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  /* Modal */
+  #modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(15, 20, 35, 0.45);
+    align-items: center; justify-content: center; z-index: 50;
+  }
+  #modal-overlay.open { display: flex; }
+  .modal {
+    background: white; border-radius: 12px; width: 440px; max-height: 88vh; overflow-y: auto;
+    padding: 20px 20px 16px;
+  }
+  .modal.wide { width: 520px; }
+  .modal h2 { margin: 0 0 14px; font-size: 17px; }
+  .field-group { margin-bottom: 10px; }
+  .field-group label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .field-group input, .field-group select, .field-group textarea { width: 100%; }
+  .field-row { display: flex; gap: 10px; }
+  .field-row .field-group { flex: 1; }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-top: 4px; }
+  .modal-actions { display: flex; gap: 8px; margin-top: 16px; }
+  .modal-actions button { flex: 1; }
+
+  .toast {
+    position: fixed; bottom: 20px; right: 20px; background: var(--primary); color: white;
+    padding: 10px 16px; border-radius: 8px; font-size: 13px; opacity: 0; transform: translateY(8px);
+    transition: opacity 0.2s, transform 0.2s; z-index: 60; pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+
+  .settings-block { padding: 0 28px 20px; max-width: 640px; }
+  .settings-block .card { margin-bottom: 14px; }
+  .settings-block p { font-size: 13px; color: var(--muted); line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="sidebar">
+    <div class="brand">
+      <div class="name">Chronic Trace</div>
+      <div class="sub">CRM</div>
+    </div>
+    <nav id="nav"></nav>
+    <div class="footer">Data is saved automatically in this browser.<br>Export to Excel anytime for a backup.</div>
+  </div>
+  <div id="content"></div>
+</div>
+
+<div id="modal-overlay">
+  <div class="modal" id="modal-body"></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================ *
+ * Chronic Trace CRM — single-file, no-install desktop web app.
+ * Open this file directly in any modern browser. All data is
+ * kept in this browser's localStorage and auto-saves on every
+ * change. Use "Export to Excel" (Settings) to back up your data
+ * to a real .xlsx file, and "Import from Excel" to restore it.
+ * ============================================================ */
+
+const STORAGE_KEY = "chronicTraceCRM_v2";
+const ORG_TYPES = ["High School", "College", "Healthcare", "Enterprise", "Partnership", "Other"];
+
+// HubSpot-style pipelines: each has its own ordered stages, default
+// probabilities, colors, and which stage counts as "won" vs "lost".
+// Opportunities carry a `pipeline` field and always belong to exactly one.
+const PIPELINES = {
+  "Sales": {
+    stages: ["Prospecting", "Qualification", "Proposal Sent", "Negotiation", "Closed Won", "Closed Lost"],
+    probabilities: { "Prospecting": 10, "Qualification": 25, "Proposal Sent": 50, "Negotiation": 75, "Closed Won": 100, "Closed Lost": 0 },
+    colors: { "Prospecting": "var(--gray)", "Qualification": "var(--accent)", "Proposal Sent": "var(--amber)", "Negotiation": "var(--purple)", "Closed Won": "var(--green)", "Closed Lost": "var(--danger)" },
+    won: "Closed Won", lost: "Closed Lost",
+  },
+  "Research": {
+    stages: ["Idea", "Literature Review", "Study Design", "IRB Approval", "Data Collection", "Published", "Discontinued"],
+    probabilities: { "Idea": 10, "Literature Review": 25, "Study Design": 40, "IRB Approval": 60, "Data Collection": 80, "Published": 100, "Discontinued": 0 },
+    colors: { "Idea": "var(--gray)", "Literature Review": "var(--accent)", "Study Design": "var(--amber)", "IRB Approval": "var(--purple)", "Data Collection": "#0EA5E9", "Published": "var(--green)", "Discontinued": "var(--danger)" },
+    won: "Published", lost: "Discontinued",
+  },
+  "Partnership": {
+    stages: ["Prospecting", "Discussions", "Agreement Drafting", "Active", "Ended"],
+    probabilities: { "Prospecting": 10, "Discussions": 30, "Agreement Drafting": 60, "Active": 100, "Ended": 0 },
+    colors: { "Prospecting": "var(--gray)", "Discussions": "var(--accent)", "Agreement Drafting": "var(--amber)", "Active": "var(--green)", "Ended": "var(--danger)" },
+    won: "Active", lost: "Ended",
+  },
+  "Funding": {
+    stages: ["Researching", "Preparing Application", "Applied", "Awarded", "Declined"],
+    probabilities: { "Researching": 10, "Preparing Application": 30, "Applied": 60, "Awarded": 100, "Declined": 0 },
+    colors: { "Researching": "var(--gray)", "Preparing Application": "var(--accent)", "Applied": "var(--amber)", "Awarded": "var(--green)", "Declined": "var(--danger)" },
+    won: "Awarded", lost: "Declined",
+  },
+  "Feedback": {
+    stages: ["Collected", "Under Review", "Actioned", "Published", "Archived"],
+    probabilities: { "Collected": 20, "Under Review": 40, "Actioned": 70, "Published": 100, "Archived": 0 },
+    colors: { "Collected": "var(--gray)", "Under Review": "var(--accent)", "Actioned": "var(--amber)", "Published": "var(--green)", "Archived": "var(--danger)" },
+    won: "Published", lost: "Archived",
+  },
+};
+const PIPELINE_NAMES = Object.keys(PIPELINES);
+function pipelineOf(name) { return PIPELINES[name] || PIPELINES["Sales"]; }
+function defaultProbability(pipeline, stage) {
+  const v = pipelineOf(pipeline).probabilities[stage];
+  return v === undefined ? 0 : v;
+}
+function stageColor(pipeline, stage) { return pipelineOf(pipeline).colors[stage] || "var(--gray)"; }
+
+const ACTIVITY_TYPES = ["Call", "Email", "Meeting", "Demo"];
+const PILOT_STATUS = ["Planning", "Active", "Completed", "Paused"];
+const PILOT_STATUS_COLORS = { "Planning": "var(--gray)", "Active": "var(--accent)", "Completed": "var(--green)", "Paused": "var(--amber)" };
+const PARTNERSHIP_TYPES = ["Curriculum", "Clinical", "Technology", "Distribution", "Other"];
+const PARTNERSHIP_STATUS = ["Prospecting", "Active", "Ended"];
+const GRANT_STATUS = ["Researching", "Applied", "Awarded", "Declined"];
+const GRANT_STATUS_COLORS = { "Researching": "var(--gray)", "Applied": "var(--accent)", "Awarded": "var(--green)", "Declined": "var(--danger)" };
+
+const NAV_ITEMS = [
+  { name: "Dashboard", enabled: true },
+  { name: "Organizations", enabled: true },
+  { name: "Contacts", enabled: true },
+  { name: "Pipelines", enabled: true },
+  { name: "Activities", enabled: true },
+  { name: "Follow Ups", enabled: true },
+  { name: "Pilot Programs", enabled: true },
+  { name: "Partnerships", enabled: true },
+  { name: "Grant Tracker", enabled: true },
+  { name: "Reports", enabled: true },
+  { name: "Settings", enabled: true },
+];
+
+// ---------------------------------------------------------------- //
+// Utilities
+// ---------------------------------------------------------------- //
+function uid(prefix) {
+  return prefix + "-" + Math.random().toString(16).slice(2, 10).toUpperCase();
+}
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+function monthKey(dateStr) {
+  if (!dateStr || dateStr.length < 7) return null;
+  return dateStr.slice(0, 7);
+}
+function monthLabel(key) {
+  if (!key) return "Unknown";
+  const [y, m] = key.split("-");
+  const names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return names[parseInt(m, 10) - 1] + " " + y;
+}
+function money(n) {
+  const v = parseFloat(n) || 0;
+  return "$" + v.toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+function escapeHtml(str) {
+  return String(str == null ? "" : str)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+function byId(id) { return document.getElementById(id); }
+function showToast(msg) {
+  const t = byId("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(showToast._timer);
+  showToast._timer = setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+// ---------------------------------------------------------------- //
+// Store — all data access goes through here.
+// ---------------------------------------------------------------- //
+const Store = {
+  state: null,
+
+  load() {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      try {
+        this.state = JSON.parse(raw);
+        this._ensureShape();
+        return;
+      } catch (e) { /* fall through to seed */ }
+    }
+    this.state = this._emptyState();
+    this.seed();
+    this.save();
+  },
+
+  _emptyState() {
+    return {
+      organizations: [], contacts: [], opportunities: [], activities: [],
+      followUps: [], pilots: [], partnerships: [], grants: [],
+    };
+  },
+
+  _ensureShape() {
+    const empty = this._emptyState();
+    Object.keys(empty).forEach(k => { if (!Array.isArray(this.state[k])) this.state[k] = []; });
+    // Migrate data saved before pipelines existed: default to "Sales".
+    this.state.opportunities.forEach(o => {
+      if (!o.pipeline || !PIPELINES[o.pipeline]) o.pipeline = "Sales";
+    });
+  },
+
+  save() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
+  },
+
+  seed() {
+    const o1 = this.addOrganization({
+      name: "Lincoln High School", type: "High School", city: "Denver", state: "CO",
+      phone: "303-555-0101", website: "lincolnhs.edu",
+      notes: "Interested in a chronic disease education pilot for the 2026-27 school year.",
+    });
+    const o2 = this.addOrganization({
+      name: "Metro Health System", type: "Healthcare", city: "Aurora", state: "CO",
+      phone: "303-555-0202", website: "metrohealth.org",
+      notes: "Potential clinical partner for patient education content.",
+    });
+    const o3 = this.addOrganization({
+      name: "Westbrook College", type: "College", city: "Boulder", state: "CO",
+      phone: "303-555-0303", website: "westbrook.edu",
+      notes: "Nursing program interested in curriculum licensing.",
+    });
+    const c1 = this.addContact({ orgId: o1, firstName: "Jane", lastName: "Doe", title: "Principal",
+      email: "jane.doe@lincolnhs.edu", phone: "303-555-0111", decisionMaker: true,
+      notes: "Primary contact, prefers email." });
+    const c2 = this.addContact({ orgId: o2, firstName: "Sam", lastName: "Lee", title: "Director of Patient Education",
+      email: "sam.lee@metrohealth.org", phone: "303-555-0212", decisionMaker: true });
+    const c3 = this.addContact({ orgId: o3, firstName: "Priya", lastName: "Nair", title: "Dept. Chair, Nursing",
+      email: "priya.nair@westbrook.edu", phone: "303-555-0313", decisionMaker: false });
+
+    const today = new Date();
+    const iso = (d) => d.toISOString().slice(0, 10);
+    const plusDays = (n) => { const d = new Date(today); d.setDate(d.getDate() + n); return iso(d); };
+    const minusDays = (n) => plusDays(-n);
+
+    const opp1 = this.addOpportunity({ pipeline: "Sales", orgId: o1, name: "District-wide health curriculum pilot", stage: "Proposal Sent",
+      amount: 18000, probability: 50, expectedCloseDate: plusDays(30), source: "Referral",
+      notes: "Waiting on school board approval." });
+    this.addOpportunity({ pipeline: "Sales", orgId: o2, name: "Patient education content license", stage: "Negotiation",
+      amount: 42000, probability: 75, expectedCloseDate: plusDays(15), source: "Conference",
+      notes: "Legal reviewing contract terms." });
+    this.addOpportunity({ pipeline: "Sales", orgId: o3, name: "Nursing curriculum licensing", stage: "Qualification",
+      amount: 9500, probability: 25, expectedCloseDate: plusDays(60), source: "Website" });
+    this.addOpportunity({ pipeline: "Sales", orgId: o1, name: "Summer health literacy program", stage: "Closed Won",
+      amount: 6000, probability: 100, expectedCloseDate: minusDays(20), source: "Referral" });
+
+    this.addOpportunity({ pipeline: "Research", orgId: o3, name: "Curriculum efficacy study with Westbrook Nursing",
+      stage: "Study Design", source: "Internal",
+      notes: "Assessing learning outcomes from the licensed curriculum." });
+    this.addOpportunity({ pipeline: "Partnership", orgId: o2, name: "Metro Health regional expansion",
+      stage: "Discussions", source: "Referral",
+      notes: "Exploring a broader partnership beyond the initial content license." });
+    this.addOpportunity({ pipeline: "Funding", orgId: o1, name: "NIH Community Health Innovation Grant",
+      stage: "Applied", amount: 50000, expectedCloseDate: plusDays(60), source: "Website" });
+    this.addOpportunity({ pipeline: "Feedback", orgId: o1, name: "Lincoln HS pilot feedback, round 1",
+      stage: "Under Review", source: "Pilot Program",
+      notes: "Teacher and student survey responses from the first pilot semester." });
+
+    this.addActivity({ orgId: o1, contactId: c1, oppId: opp1, type: "Meeting", date: minusDays(3),
+      subject: "Kickoff call with Principal Doe", notes: "Walked through pilot scope and timeline." });
+    this.addActivity({ orgId: o2, contactId: c2, type: "Call", date: today.toISOString().slice(0,10),
+      subject: "Check in on contract review", notes: "" });
+    this.addActivity({ orgId: o3, contactId: c3, type: "Email", date: minusDays(1),
+      subject: "Sent licensing terms", notes: "" });
+
+    this.addFollowUp({ orgId: o1, contactId: c1, dueDate: minusDays(2),
+      description: "Send updated pilot budget", status: "Open" });
+    this.addFollowUp({ orgId: o2, contactId: c2, dueDate: today.toISOString().slice(0,10),
+      description: "Confirm legal sign-off timeline", status: "Open" });
+    this.addFollowUp({ orgId: o3, contactId: c3, dueDate: plusDays(5),
+      description: "Follow up on curriculum sample feedback", status: "Open" });
+
+    this.addPilot({
+      orgId: o1, name: "Lincoln HS Chronic Disease Pilot", status: "Active",
+      startDate: minusDays(20), endDate: plusDays(70),
+      participantCount: 85, targetParticipants: 200,
+      notes: "First semester pilot across 4 health classes.",
+      milestones: [
+        { id: uid("MS"), title: "Board approval", dueDate: minusDays(25), done: true },
+        { id: uid("MS"), title: "Teacher training", dueDate: minusDays(10), done: true },
+        { id: uid("MS"), title: "Midpoint survey", dueDate: plusDays(10), done: false },
+        { id: uid("MS"), title: "Final report", dueDate: plusDays(70), done: false },
+      ],
+    });
+
+    this.addPartnership({
+      orgId: o3, type: "Curriculum", status: "Active", startDate: minusDays(90),
+      notes: "Licensing Chronic Trace curriculum for the nursing program.",
+    });
+
+    this.addGrant({
+      name: "State Health Education Innovation Grant", funder: "Colorado Dept. of Public Health",
+      amount: 25000, status: "Applied", deadline: plusDays(45), orgId: o1,
+      notes: "Application submitted, awaiting committee review.",
+    });
+  },
+
+  // ================= Organizations ================= //
+  listOrganizations() { return this.state.organizations.slice(); },
+  getOrganization(id) { return this.state.organizations.find(o => o.id === id) || null; },
+
+  addOrganization(data) {
+    const org = {
+      id: uid("ORG"),
+      name: data.name || "", type: data.type || "", industry: data.industry || "",
+      address: data.address || "", city: data.city || "", state: data.state || "", zip: data.zip || "",
+      phone: data.phone || "", website: data.website || "", notes: data.notes || "",
+      createdDate: todayStr(), lastContactDate: data.lastContactDate || "",
+    };
+    this.state.organizations.push(org);
+    this.save();
+    return org.id;
+  },
+
+  updateOrganization(id, data) {
+    const org = this.getOrganization(id);
+    if (!org) throw new Error("Organization not found: " + id);
+    Object.assign(org, data);
+    if (data.name !== undefined) {
+      this.state.contacts.forEach(c => { if (c.orgId === id) c.orgName = org.name; });
+      this.state.opportunities.forEach(o => { if (o.orgId === id) o.orgName = org.name; });
+      this.state.pilots.forEach(p => { if (p.orgId === id) p.orgName = org.name; });
+      this.state.partnerships.forEach(p => { if (p.orgId === id) p.orgName = org.name; });
+      this.state.grants.forEach(g => { if (g.orgId === id) g.orgName = org.name; });
+    }
+    this.save();
+  },
+
+  deleteOrganization(id) {
+    this.state.organizations = this.state.organizations.filter(o => o.id !== id);
+    const unlink = (arr, field, nameField) => arr.forEach(item => {
+      if (item[field] === id) { item[field] = ""; if (nameField) item[nameField] = ""; }
+    });
+    unlink(this.state.contacts, "orgId", "orgName");
+    unlink(this.state.opportunities, "orgId", "orgName");
+    unlink(this.state.pilots, "orgId", "orgName");
+    unlink(this.state.partnerships, "orgId", "orgName");
+    unlink(this.state.grants, "orgId", "orgName");
+    this.save();
+  },
+
+  // ================= Contacts ================= //
+  listContacts() { return this.state.contacts.slice(); },
+  getContact(id) { return this.state.contacts.find(c => c.id === id) || null; },
+  contactsForOrg(orgId) { return this.state.contacts.filter(c => c.orgId === orgId); },
+
+  addContact(data) {
+    const org = data.orgId ? this.getOrganization(data.orgId) : null;
+    const contact = {
+      id: uid("CON"),
+      orgId: data.orgId || "", orgName: org ? org.name : "",
+      firstName: data.firstName || "", lastName: data.lastName || "", title: data.title || "",
+      email: data.email || "", phone: data.phone || "", decisionMaker: !!data.decisionMaker,
+      notes: data.notes || "", createdDate: todayStr(), lastContactDate: data.lastContactDate || "",
+    };
+    this.state.contacts.push(contact);
+    this.save();
+    return contact.id;
+  },
+
+  updateContact(id, data) {
+    const c = this.getContact(id);
+    if (!c) throw new Error("Contact not found: " + id);
+    Object.assign(c, data);
+    if (data.orgId !== undefined) {
+      const org = data.orgId ? this.getOrganization(data.orgId) : null;
+      c.orgName = org ? org.name : "";
+    }
+    this.save();
+  },
+
+  deleteContact(id) {
+    this.state.contacts = this.state.contacts.filter(c => c.id !== id);
+    this.state.activities.forEach(a => { if (a.contactId === id) a.contactId = ""; });
+    this.state.followUps.forEach(f => { if (f.contactId === id) f.contactId = ""; });
+    this.save();
+  },
+
+  // ================= Opportunities ================= //
+  listOpportunities() { return this.state.opportunities.slice(); },
+  getOpportunity(id) { return this.state.opportunities.find(o => o.id === id) || null; },
+  opportunitiesForOrg(orgId) { return this.state.opportunities.filter(o => o.orgId === orgId); },
+
+  addOpportunity(data) {
+    const org = data.orgId ? this.getOrganization(data.orgId) : null;
+    const pipeline = data.pipeline && PIPELINES[data.pipeline] ? data.pipeline : "Sales";
+    const stage = data.stage || pipelineOf(pipeline).stages[0];
+    const opp = {
+      id: uid("OPP"), orgId: data.orgId || "", orgName: org ? org.name : "",
+      name: data.name || "", pipeline, stage,
+      amount: parseFloat(data.amount) || 0,
+      probability: data.probability !== undefined && data.probability !== "" ? parseFloat(data.probability) : defaultProbability(pipeline, stage),
+      expectedCloseDate: data.expectedCloseDate || "", source: data.source || "",
+      notes: data.notes || "", createdDate: todayStr(),
+    };
+    this.state.opportunities.push(opp);
+    this.save();
+    return opp.id;
+  },
+
+  updateOpportunity(id, data) {
+    const o = this.getOpportunity(id);
+    if (!o) throw new Error("Opportunity not found: " + id);
+    const next = Object.assign({}, data);
+    if (next.amount !== undefined) next.amount = parseFloat(next.amount) || 0;
+    if (next.probability !== undefined) next.probability = parseFloat(next.probability) || 0;
+    Object.assign(o, next);
+    if (data.orgId !== undefined) {
+      const org = data.orgId ? this.getOrganization(data.orgId) : null;
+      o.orgName = org ? org.name : "";
+    }
+    this.save();
+  },
+
+  setOpportunityStage(id, stage) {
+    const o = this.getOpportunity(id);
+    if (!o) return;
+    this.updateOpportunity(id, { stage, probability: defaultProbability(o.pipeline, stage) });
+  },
+
+  deleteOpportunity(id) {
+    this.state.opportunities = this.state.opportunities.filter(o => o.id !== id);
+    this.state.activities.forEach(a => { if (a.oppId === id) a.oppId = ""; });
+    this.save();
+  },
+
+  // ================= Activities ================= //
+  listActivities() { return this.state.activities.slice(); },
+  getActivity(id) { return this.state.activities.find(a => a.id === id) || null; },
+
+  addActivity(data) {
+    const activity = {
+      id: uid("ACT"), orgId: data.orgId || "", contactId: data.contactId || "", oppId: data.oppId || "",
+      type: data.type || ACTIVITY_TYPES[0], date: data.date || todayStr(),
+      subject: data.subject || "", notes: data.notes || "",
+    };
+    this.state.activities.push(activity);
+    this.save();
+    return activity.id;
+  },
+
+  updateActivity(id, data) {
+    const a = this.getActivity(id);
+    if (!a) throw new Error("Activity not found: " + id);
+    Object.assign(a, data);
+    this.save();
+  },
+
+  deleteActivity(id) {
+    this.state.activities = this.state.activities.filter(a => a.id !== id);
+    this.save();
+  },
+
+  // ================= Follow Ups ================= //
+  listFollowUps() { return this.state.followUps.slice(); },
+  getFollowUp(id) { return this.state.followUps.find(f => f.id === id) || null; },
+
+  addFollowUp(data) {
+    const followUp = {
+      id: uid("FUP"), orgId: data.orgId || "", contactId: data.contactId || "",
+      dueDate: data.dueDate || todayStr(), description: data.description || "",
+      status: data.status || "Open", createdDate: todayStr(),
+    };
+    this.state.followUps.push(followUp);
+    this.save();
+    return followUp.id;
+  },
+
+  updateFollowUp(id, data) {
+    const f = this.getFollowUp(id);
+    if (!f) throw new Error("Follow-up not found: " + id);
+    Object.assign(f, data);
+    this.save();
+  },
+
+  toggleFollowUpStatus(id) {
+    const f = this.getFollowUp(id);
+    if (!f) return;
+    f.status = f.status === "Done" ? "Open" : "Done";
+    this.save();
+  },
+
+  deleteFollowUp(id) {
+    this.state.followUps = this.state.followUps.filter(f => f.id !== id);
+    this.save();
+  },
+
+  // ================= Pilot Programs ================= //
+  listPilots() { return this.state.pilots.slice(); },
+  getPilot(id) { return this.state.pilots.find(p => p.id === id) || null; },
+
+  addPilot(data) {
+    const org = data.orgId ? this.getOrganization(data.orgId) : null;
+    const pilot = {
+      id: uid("PIL"), orgId: data.orgId || "", orgName: org ? org.name : "",
+      name: data.name || "", status: data.status || PILOT_STATUS[0],
+      startDate: data.startDate || "", endDate: data.endDate || "",
+      participantCount: parseInt(data.participantCount) || 0,
+      targetParticipants: parseInt(data.targetParticipants) || 0,
+      notes: data.notes || "", milestones: Array.isArray(data.milestones) ? data.milestones : [],
+      createdDate: todayStr(),
+    };
+    this.state.pilots.push(pilot);
+    this.save();
+    return pilot.id;
+  },
+
+  updatePilot(id, data) {
+    const p = this.getPilot(id);
+    if (!p) throw new Error("Pilot not found: " + id);
+    const next = Object.assign({}, data);
+    if (next.participantCount !== undefined) next.participantCount = parseInt(next.participantCount) || 0;
+    if (next.targetParticipants !== undefined) next.targetParticipants = parseInt(next.targetParticipants) || 0;
+    Object.assign(p, next);
+    if (data.orgId !== undefined) {
+      const org = data.orgId ? this.getOrganization(data.orgId) : null;
+      p.orgName = org ? org.name : "";
+    }
+    this.save();
+  },
+
+  deletePilot(id) {
+    this.state.pilots = this.state.pilots.filter(p => p.id !== id);
+    this.save();
+  },
+
+  // ================= Partnerships ================= //
+  listPartnerships() { return this.state.partnerships.slice(); },
+  getPartnership(id) { return this.state.partnerships.find(p => p.id === id) || null; },
+
+  addPartnership(data) {
+    const org = data.orgId ? this.getOrganization(data.orgId) : null;
+    const partnership = {
+      id: uid("PART"), orgId: data.orgId || "", orgName: org ? org.name : "",
+      type: data.type || PARTNERSHIP_TYPES[0], status: data.status || PARTNERSHIP_STATUS[0],
+      startDate: data.startDate || "", notes: data.notes || "", createdDate: todayStr(),
+    };
+    this.state.partnerships.push(partnership);
+    this.save();
+    return partnership.id;
+  },
+
+  updatePartnership(id, data) {
+    const p = this.getPartnership(id);
+    if (!p) throw new Error("Partnership not found: " + id);
+    Object.assign(p, data);
+    if (data.orgId !== undefined) {
+      const org = data.orgId ? this.getOrganization(data.orgId) : null;
+      p.orgName = org ? org.name : "";
+    }
+    this.save();
+  },
+
+  deletePartnership(id) {
+    this.state.partnerships = this.state.partnerships.filter(p => p.id !== id);
+    this.save();
+  },
+
+  // ================= Grant Tracker ================= //
+  listGrants() { return this.state.grants.slice(); },
+  getGrant(id) { return this.state.grants.find(g => g.id === id) || null; },
+
+  addGrant(data) {
+    const org = data.orgId ? this.getOrganization(data.orgId) : null;
+    const grant = {
+      id: uid("GRANT"), name: data.name || "", funder: data.funder || "",
+      amount: parseFloat(data.amount) || 0, status: data.status || GRANT_STATUS[0],
+      deadline: data.deadline || "", orgId: data.orgId || "", orgName: org ? org.name : "",
+      notes: data.notes || "", createdDate: todayStr(),
+    };
+    this.state.grants.push(grant);
+    this.save();
+    return grant.id;
+  },
+
+  updateGrant(id, data) {
+    const g = this.getGrant(id);
+    if (!g) throw new Error("Grant not found: " + id);
+    const next = Object.assign({}, data);
+    if (next.amount !== undefined) next.amount = parseFloat(next.amount) || 0;
+    Object.assign(g, next);
+    if (data.orgId !== undefined) {
+      const org = data.orgId ? this.getOrganization(data.orgId) : null;
+      g.orgName = org ? org.name : "";
+    }
+    this.save();
+  },
+
+  deleteGrant(id) {
+    this.state.grants = this.state.grants.filter(g => g.id !== id);
+    this.save();
+  },
+
+  // ================= Dashboard ================= //
+  dashboardMetrics() {
+    const orgs = this.listOrganizations();
+    const contacts = this.listContacts();
+    const opps = this.listOpportunities();
+    const today = todayStr();
+
+    const byType = {};
+    orgs.forEach(o => { const t = o.type || "Unspecified"; byType[t] = (byType[t] || 0) + 1; });
+    const decisionMakers = contacts.filter(c => c.decisionMaker).length;
+    const recentOrgs = orgs.slice()
+      .sort((a, b) => (b.createdDate || "").localeCompare(a.createdDate || ""))
+      .slice(0, 5);
+
+    // Total Pipeline / Expected Revenue / Win Rate are scoped to the Sales
+    // pipeline specifically -- it's the only pipeline where "amount" reliably
+    // means dollars of revenue. Other pipelines (Research, Partnership,
+    // Funding, Feedback) track process, not sales revenue.
+    const salesOpps = opps.filter(o => o.pipeline === "Sales");
+    const salesPipeline = PIPELINES.Sales;
+    const openSalesOpps = salesOpps.filter(o => o.stage !== salesPipeline.won && o.stage !== salesPipeline.lost);
+    const totalPipeline = openSalesOpps.reduce((s, o) => s + (parseFloat(o.amount) || 0), 0);
+    const expectedRevenue = openSalesOpps.reduce((s, o) => s + (parseFloat(o.amount) || 0) * (parseFloat(o.probability) || 0) / 100, 0);
+    const closedWonCount = salesOpps.filter(o => o.stage === salesPipeline.won).length;
+    const closedLostCount = salesOpps.filter(o => o.stage === salesPipeline.lost).length;
+    const winRate = (closedWonCount + closedLostCount) > 0
+      ? (closedWonCount / (closedWonCount + closedLostCount)) * 100
+      : null;
+
+    const oppsByPipeline = {};
+    PIPELINE_NAMES.forEach(p => { oppsByPipeline[p] = 0; });
+    opps.forEach(o => { oppsByPipeline[o.pipeline] = (oppsByPipeline[o.pipeline] || 0) + 1; });
+
+    const activitiesDueToday = this.listActivities().filter(a => a.date === today).length;
+    const openFollowUps = this.listFollowUps().filter(f => f.status !== "Done");
+    const followUpsDueToday = openFollowUps.filter(f => f.dueDate === today).length;
+    const followUpsOverdue = openFollowUps.filter(f => f.dueDate && f.dueDate < today).length;
+
+    return {
+      totalOrgs: orgs.length, totalContacts: contacts.length, decisionMakers,
+      byType, recentOrgs,
+      totalPipeline, expectedRevenue, oppsByPipeline, winRate,
+      activitiesDueToday, followUpsDueToday, followUpsOverdue,
+    };
+  },
+
+  replaceAll(data) {
+    this.state = Object.assign(this._emptyState(), data);
+    this.save();
+  },
+};
+
+// ---------------------------------------------------------------- //
+// Navigation shell
+// ---------------------------------------------------------------- //
+let currentScreen = "Dashboard";
+let orgScreenState = { search: "", typeFilter: "All Types", selectedOrgId: null };
+let contactScreenState = { search: "" };
+let oppScreenState = { view: "kanban", search: "", pipeline: "Sales", stageFilter: "All Stages" };
+let activityScreenState = { search: "", typeFilter: "All Types" };
+let pilotScreenState = {};
+let partnershipScreenState = { search: "" };
+let grantScreenState = { search: "" };
+let reportsScreenState = { pipeline: "Sales" };
+let modalMilestones = [];
+
+function renderSidebar() {
+  const nav = byId("nav");
+  nav.innerHTML = "";
+  NAV_ITEMS.forEach(item => {
+    const btn = document.createElement("button");
+    btn.textContent = item.name;
+    btn.onclick = () => showScreen(item.name);
+    nav.appendChild(btn);
+  });
+}
+
+function updateActiveNav() {
+  const nav = byId("nav");
+  [...nav.children].forEach((btn, i) => {
+    btn.classList.toggle("active", NAV_ITEMS[i].name === currentScreen);
+  });
+}
+
+function showScreen(name) {
+  currentScreen = name;
+  updateActiveNav();
+  const content = byId("content");
+  if (name === "Dashboard") content.innerHTML = renderDashboard();
+  else if (name === "Organizations") { content.innerHTML = renderOrganizations(); afterRenderOrganizations(); }
+  else if (name === "Contacts") { content.innerHTML = renderContacts(); afterRenderContacts(); }
+  else if (name === "Pipelines") { content.innerHTML = renderOpportunities(); afterRenderOpportunities(); }
+  else if (name === "Activities") { content.innerHTML = renderActivities(); afterRenderActivities(); }
+  else if (name === "Follow Ups") { content.innerHTML = renderFollowUps(); afterRenderFollowUps(); }
+  else if (name === "Pilot Programs") { content.innerHTML = renderPilotPrograms(); afterRenderPilotPrograms(); }
+  else if (name === "Partnerships") { content.innerHTML = renderPartnerships(); afterRenderPartnerships(); }
+  else if (name === "Grant Tracker") { content.innerHTML = renderGrantTracker(); afterRenderGrantTracker(); }
+  else if (name === "Reports") { content.innerHTML = renderReports(); afterRenderReports(); }
+  else if (name === "Settings") { content.innerHTML = renderSettings(); afterRenderSettings(); }
+  else content.innerHTML = renderComingSoon(name);
+}
+
+function refreshCurrentScreen() { showScreen(currentScreen); }
+
+// Shared: build <option> tags for an organization dropdown
+function orgOptionsHtml(selectedId, includeNone) {
+  const orgs = Store.listOrganizations();
+  let html = includeNone ? `<option value="">(None)</option>` : "";
+  html += orgs.map(o => `<option value="${o.id}" ${o.id === selectedId ? "selected" : ""}>${escapeHtml(o.name)}</option>`).join("");
+  return html;
+}
+function contactOptionsHtml(orgId, selectedId) {
+  const contacts = orgId ? Store.contactsForOrg(orgId) : Store.listContacts();
+  let html = `<option value="">(None)</option>`;
+  html += contacts.map(c => `<option value="${c.id}" ${c.id === selectedId ? "selected" : ""}>${escapeHtml(c.firstName + " " + c.lastName)}</option>`).join("");
+  return html;
+}
+function oppOptionsHtml(orgId, selectedId) {
+  const opps = orgId ? Store.opportunitiesForOrg(orgId) : Store.listOpportunities();
+  let html = `<option value="">(None)</option>`;
+  html += opps.map(o => `<option value="${o.id}" ${o.id === selectedId ? "selected" : ""}>${escapeHtml(o.name)} (${escapeHtml(o.pipeline)})</option>`).join("");
+  return html;
+}
+
+// ---------------------------------------------------------------- //
+// Dashboard
+// ---------------------------------------------------------------- //
+function renderDashboard() {
+  const m = Store.dashboardMetrics();
+  const byTypeRows = Object.keys(m.byType).length
+    ? Object.entries(m.byType).map(([type, count]) =>
+        `<div class="list-row"><span class="l">${escapeHtml(type)}</span><span class="r">${count}</span></div>`
+      ).join("")
+    : `<div class="muted-note">No organizations yet.</div>`;
+
+  const recentRows = m.recentOrgs.length
+    ? m.recentOrgs.map(o =>
+        `<div class="list-row"><span>${escapeHtml(o.name || "(unnamed)")}</span><span class="l">${escapeHtml(o.createdDate)}</span></div>`
+      ).join("")
+    : `<div class="muted-note">No organizations yet.</div>`;
+
+  const pipelineRows = PIPELINE_NAMES.map(p =>
+    `<div class="list-row"><span class="l">${escapeHtml(p)}</span><span class="r">${m.oppsByPipeline[p] || 0}</span></div>`
+  ).join("");
+
+  const winRateDisplay = m.winRate === null ? "—" : Math.round(m.winRate) + "%";
+
+  return `
+    <div class="header">
+      <h1>Dashboard</h1>
+      <p>Overview of your pipeline, organizations, and contacts.</p>
+    </div>
+    <div class="cards">
+      <div class="metric-card"><div class="value" style="color:var(--accent)">${m.totalOrgs}</div><div class="label">Total Organizations</div></div>
+      <div class="metric-card"><div class="value" style="color:var(--green)">${m.totalContacts}</div><div class="label">Total Contacts</div></div>
+      <div class="metric-card"><div class="value" style="color:var(--amber)">${m.decisionMakers}</div><div class="label">Decision Makers</div></div>
+    </div>
+    <div class="cards">
+      <div class="metric-card"><div class="value" style="color:var(--primary)">${money(m.totalPipeline)}</div><div class="label">Total Pipeline (Sales)</div></div>
+      <div class="metric-card"><div class="value" style="color:var(--purple)">${money(m.expectedRevenue)}</div><div class="label">Expected Revenue (Sales)</div></div>
+      <div class="metric-card"><div class="value" style="color:var(--green)">${winRateDisplay}</div><div class="label">Win Rate (Sales)</div></div>
+    </div>
+    <div class="body-grid">
+      <div class="card"><h3>Organizations by Type</h3>${byTypeRows}</div>
+      <div class="card"><h3>Opportunities by Pipeline</h3>${pipelineRows}</div>
+    </div>
+    <div class="body-grid">
+      <div class="card">
+        <h3>Due Today &amp; Overdue</h3>
+        <div class="list-row"><span class="l">Activities due today</span><span class="r">${m.activitiesDueToday}</span></div>
+        <div class="list-row"><span class="l">Follow-ups due today</span><span class="r">${m.followUpsDueToday}</span></div>
+        <div class="list-row"><span class="l">Follow-ups overdue</span><span class="r" style="color:var(--danger)">${m.followUpsOverdue}</span></div>
+      </div>
+      <div class="card"><h3>Recently Added Organizations</h3>${recentRows}</div>
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------- //
+// Organizations
+// ---------------------------------------------------------------- //
+function renderOrganizations() {
+  const typeOptions = ["All Types", ...ORG_TYPES]
+    .map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join("");
+
+  return `
+    <div class="header">
+      <h1>Organizations</h1>
+      <p>Accounts, prospects, and customers.</p>
+    </div>
+    <div class="toolbar">
+      <input type="search" id="org-search" placeholder="Search organizations..." style="width:260px" value="${escapeHtml(orgScreenState.search)}">
+      <select id="org-type-filter">${typeOptions}</select>
+      <div class="spacer"></div>
+      <button class="btn" id="org-add-btn">+ Add Organization</button>
+    </div>
+    <div class="body-grid orgs-grid">
+      <div class="card" style="padding:0;">
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Name</th><th>Type</th><th>City</th><th>State</th><th>Phone</th><th>Last Contact</th></tr></thead>
+            <tbody id="org-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card" id="org-detail"></div>
+    </div>
+  `;
+}
+
+function afterRenderOrganizations() {
+  byId("org-type-filter").value = orgScreenState.typeFilter;
+  byId("org-search").addEventListener("input", e => {
+    orgScreenState.search = e.target.value;
+    renderOrgTable();
+  });
+  byId("org-type-filter").addEventListener("change", e => {
+    orgScreenState.typeFilter = e.target.value;
+    renderOrgTable();
+  });
+  byId("org-add-btn").addEventListener("click", () => openOrgModal(null));
+  renderOrgTable();
+  renderOrgDetail();
+}
+
+function filteredOrganizations() {
+  let orgs = Store.listOrganizations();
+  if (orgScreenState.typeFilter && orgScreenState.typeFilter !== "All Types") {
+    orgs = orgs.filter(o => o.type === orgScreenState.typeFilter);
+  }
+  const q = orgScreenState.search.trim().toLowerCase();
+  if (q) {
+    orgs = orgs.filter(o => Object.values(o).join(" ").toLowerCase().includes(q));
+  }
+  return orgs;
+}
+
+function renderOrgTable() {
+  const tbody = byId("org-table-body");
+  if (!tbody) return;
+  const orgs = filteredOrganizations();
+  tbody.innerHTML = orgs.map(o => `
+    <tr data-id="${o.id}" class="${o.id === orgScreenState.selectedOrgId ? "selected" : ""}">
+      <td>${escapeHtml(o.name)}</td><td>${escapeHtml(o.type)}</td><td>${escapeHtml(o.city)}</td>
+      <td>${escapeHtml(o.state)}</td><td>${escapeHtml(o.phone)}</td><td>${escapeHtml(o.lastContactDate)}</td>
+    </tr>
+  `).join("") || `<tr><td colspan="6" class="muted-note">No organizations match.</td></tr>`;
+
+  [...tbody.querySelectorAll("tr[data-id]")].forEach(row => {
+    row.addEventListener("click", () => {
+      orgScreenState.selectedOrgId = row.getAttribute("data-id");
+      renderOrgTable();
+      renderOrgDetail();
+    });
+  });
+}
+
+function renderOrgDetail() {
+  const detail = byId("org-detail");
+  if (!detail) return;
+  const org = orgScreenState.selectedOrgId ? Store.getOrganization(orgScreenState.selectedOrgId) : null;
+  if (!org) {
+    detail.innerHTML = `<div class="detail-empty">Select an organization to view details.</div>`;
+    return;
+  }
+  const contacts = Store.contactsForOrg(org.id);
+  const contactRows = contacts.length
+    ? contacts.map(c => `<div class="contact-mini-row"><span>${escapeHtml(c.firstName + " " + c.lastName)}</span><span class="l">${escapeHtml(c.title)}</span></div>`).join("")
+    : `<div class="muted-note">No linked contacts.</div>`;
+  const opps = Store.opportunitiesForOrg(org.id);
+  const oppRows = opps.length
+    ? opps.map(o => `<div class="contact-mini-row"><span>${escapeHtml(o.name)}</span><span class="l">${escapeHtml(o.pipeline)}: ${escapeHtml(o.stage)}</span></div>`).join("")
+    : `<div class="muted-note">No linked opportunities.</div>`;
+  const address = [org.address, org.city, org.state ? org.state + (org.zip ? " " + org.zip : "") : org.zip]
+    .filter(Boolean).join(", ");
+
+  detail.innerHTML = `
+    <div class="detail-title">${escapeHtml(org.name)}</div>
+    <div class="detail-actions">
+      <button class="btn small" id="org-edit-btn">Edit</button>
+      <button class="btn small danger" id="org-delete-btn">Delete</button>
+    </div>
+    <div class="detail-field"><span class="label">Type</span><span class="value">${escapeHtml(org.type) || "-"}</span></div>
+    <div class="detail-field"><span class="label">Phone</span><span class="value">${escapeHtml(org.phone) || "-"}</span></div>
+    <div class="detail-field"><span class="label">Website</span><span class="value">${escapeHtml(org.website) || "-"}</span></div>
+    <div class="detail-field"><span class="label">Address</span><span class="value">${escapeHtml(address) || "-"}</span></div>
+    <div class="detail-field"><span class="label">Created</span><span class="value">${escapeHtml(org.createdDate) || "-"}</span></div>
+    <div class="detail-field"><span class="label">Last Contact</span><span class="value">${escapeHtml(org.lastContactDate) || "-"}</span></div>
+    <div class="detail-section-title">Notes</div>
+    <div class="notes-box">${escapeHtml(org.notes) || "-"}</div>
+    <div class="detail-section-title">Contacts</div>
+    ${contactRows}
+    <div class="detail-section-title">Opportunities</div>
+    ${oppRows}
+  `;
+
+  byId("org-edit-btn").addEventListener("click", () => openOrgModal(org.id));
+  byId("org-delete-btn").addEventListener("click", () => {
+    if (confirm("Delete this organization? Linked contacts, opportunities, pilots, partnerships, and grants will be unlinked, not deleted.")) {
+      Store.deleteOrganization(org.id);
+      orgScreenState.selectedOrgId = null;
+      renderOrgTable();
+      renderOrgDetail();
+      showToast("Organization deleted.");
+    }
+  });
+}
+
+function openOrgModal(orgId) {
+  const org = orgId ? Store.getOrganization(orgId) : null;
+  const typeOptions = ORG_TYPES.map(t =>
+    `<option value="${escapeHtml(t)}" ${org && org.type === t ? "selected" : ""}>${escapeHtml(t)}</option>`
+  ).join("");
+
+  byId("modal-body").innerHTML = `
+    <h2>${org ? "Edit Organization" : "Add Organization"}</h2>
+    <div class="field-group"><label>Name</label><input type="text" id="f-name" value="${escapeHtml(org ? org.name : "")}"></div>
+    <div class="field-group"><label>Type</label><select id="f-type">${typeOptions}</select></div>
+    <div class="field-group"><label>Industry</label><input type="text" id="f-industry" value="${escapeHtml(org ? org.industry : "")}"></div>
+    <div class="field-group"><label>Phone</label><input type="tel" id="f-phone" value="${escapeHtml(org ? org.phone : "")}"></div>
+    <div class="field-group"><label>Website</label><input type="url" id="f-website" value="${escapeHtml(org ? org.website : "")}"></div>
+    <div class="field-group"><label>Address</label><input type="text" id="f-address" value="${escapeHtml(org ? org.address : "")}"></div>
+    <div class="field-row">
+      <div class="field-group"><label>City</label><input type="text" id="f-city" value="${escapeHtml(org ? org.city : "")}"></div>
+      <div class="field-group"><label>State</label><input type="text" id="f-state" value="${escapeHtml(org ? org.state : "")}"></div>
+      <div class="field-group"><label>Zip</label><input type="text" id="f-zip" value="${escapeHtml(org ? org.zip : "")}"></div>
+    </div>
+    <div class="field-group"><label>Notes</label><textarea id="f-notes" rows="3">${escapeHtml(org ? org.notes : "")}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="modal-cancel">Cancel</button>
+      <button class="btn" id="modal-save">Save</button>
+    </div>
+  `;
+  openModal();
+
+  byId("modal-cancel").addEventListener("click", closeModal);
+  byId("modal-save").addEventListener("click", () => {
+    const data = {
+      name: byId("f-name").value.trim(),
+      type: byId("f-type").value,
+      industry: byId("f-industry").value.trim(),
+      phone: byId("f-phone").value.trim(),
+      website: byId("f-website").value.trim(),
+      address: byId("f-address").value.trim(),
+      city: byId("f-city").value.trim(),
+      state: byId("f-state").value.trim(),
+      zip: byId("f-zip").value.trim(),
+      notes: byId("f-notes").value.trim(),
+    };
+    if (!data.name) { alert("Organization name is required."); return; }
+    let id;
+    if (org) { Store.updateOrganization(org.id, data); id = org.id; }
+    else { id = Store.addOrganization(data); }
+    orgScreenState.selectedOrgId = id;
+    closeModal();
+    renderOrgTable();
+    renderOrgDetail();
+    showToast(org ? "Organization updated." : "Organization added.");
+  });
+}
+
+// ---------------------------------------------------------------- //
+// Contacts
+// ---------------------------------------------------------------- //
+function renderContacts() {
+  return `
+    <div class="header">
+      <h1>Contacts</h1>
+      <p>People linked to your organizations.</p>
+    </div>
+    <div class="toolbar">
+      <input type="search" id="contact-search" placeholder="Search contacts..." style="width:260px" value="${escapeHtml(contactScreenState.search)}">
+      <div class="spacer"></div>
+      <button class="btn" id="contact-add-btn">+ Add Contact</button>
+    </div>
+    <div style="padding:4px 28px 20px;">
+      <div class="card" style="padding:0;">
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>First Name</th><th>Last Name</th><th>Organization</th><th>Title</th><th>Email</th><th>Phone</th><th>Decision Maker</th><th></th></tr></thead>
+            <tbody id="contact-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function afterRenderContacts() {
+  byId("contact-search").addEventListener("input", e => {
+    contactScreenState.search = e.target.value;
+    renderContactTable();
+  });
+  byId("contact-add-btn").addEventListener("click", () => openContactModal(null));
+  renderContactTable();
+}
+
+function filteredContacts() {
+  let contacts = Store.listContacts();
+  const q = contactScreenState.search.trim().toLowerCase();
+  if (q) {
+    contacts = contacts.filter(c => Object.values(c).join(" ").toLowerCase().includes(q));
+  }
+  return contacts;
+}
+
+function renderContactTable() {
+  const tbody = byId("contact-table-body");
+  if (!tbody) return;
+  const contacts = filteredContacts();
+  tbody.innerHTML = contacts.map(c => `
+    <tr data-id="${c.id}">
+      <td>${escapeHtml(c.firstName)}</td><td>${escapeHtml(c.lastName)}</td><td>${escapeHtml(c.orgName)}</td>
+      <td>${escapeHtml(c.title)}</td><td>${escapeHtml(c.email)}</td><td>${escapeHtml(c.phone)}</td>
+      <td>${c.decisionMaker ? "Y" : "N"}</td>
+      <td>
+        <button class="btn small outline contact-edit-btn" data-id="${c.id}">Edit</button>
+        <button class="btn small danger contact-delete-btn" data-id="${c.id}">Delete</button>
+      </td>
+    </tr>
+  `).join("") || `<tr><td colspan="8" class="muted-note">No contacts match.</td></tr>`;
+
+  [...tbody.querySelectorAll(".contact-edit-btn")].forEach(btn => {
+    btn.addEventListener("click", e => {
+      e.stopPropagation();
+      openContactModal(btn.getAttribute("data-id"));
+    });
+  });
+  [...tbody.querySelectorAll(".contact-delete-btn")].forEach(btn => {
+    btn.addEventListener("click", e => {
+      e.stopPropagation();
+      const id = btn.getAttribute("data-id");
+      const c = Store.getContact(id);
+      if (c && confirm(`Delete ${c.firstName} ${c.lastName}?`)) {
+        Store.deleteContact(id);
+        renderContactTable();
+        showToast("Contact deleted.");
+      }
+    });
+  });
+}
+
+function openContactModal(contactId) {
+  const contact = contactId ? Store.getContact(contactId) : null;
+
+  byId("modal-body").innerHTML = `
+    <h2>${contact ? "Edit Contact" : "Add Contact"}</h2>
+    <div class="field-group"><label>Organization</label><select id="f-org">${orgOptionsHtml(contact ? contact.orgId : "", true)}</select></div>
+    <div class="field-row">
+      <div class="field-group"><label>First Name</label><input type="text" id="f-first" value="${escapeHtml(contact ? contact.firstName : "")}"></div>
+      <div class="field-group"><label>Last Name</label><input type="text" id="f-last" value="${escapeHtml(contact ? contact.lastName : "")}"></div>
+    </div>
+    <div class="field-group"><label>Title</label><input type="text" id="f-title" value="${escapeHtml(contact ? contact.title : "")}"></div>
+    <div class="field-group"><label>Email</label><input type="email" id="f-email" value="${escapeHtml(contact ? contact.email : "")}"></div>
+    <div class="field-group"><label>Phone</label><input type="tel" id="f-cphone" value="${escapeHtml(contact ? contact.phone : "")}"></div>
+    <div class="field-group"><label>Notes</label><textarea id="f-cnotes" rows="3">${escapeHtml(contact ? contact.notes : "")}</textarea></div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="f-dm" ${contact && contact.decisionMaker ? "checked" : ""}>
+      <label for="f-dm" style="margin:0;">This person is a decision maker</label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="modal-cancel">Cancel</button>
+      <button class="btn" id="modal-save">Save</button>
+    </div>
+  `;
+  openModal();
+
+  byId("modal-cancel").addEventListener("click", closeModal);
+  byId("modal-save").addEventListener("click", () => {
+    const data = {
+      orgId: byId("f-org").value,
+      firstName: byId("f-first").value.trim(),
+      lastName: byId("f-last").value.trim(),
+      title: byId("f-title").value.trim(),
+      email: byId("f-email").value.trim(),
+      phone: byId("f-cphone").value.trim(),
+      notes: byId("f-cnotes").value.trim(),
+      decisionMaker: byId("f-dm").checked,
+    };
+    if (!data.firstName && !data.lastName) { alert("First or last name is required."); return; }
+    if (contact) Store.updateContact(contact.id, data);
+    else Store.addContact(data);
+    closeModal();
+    renderContactTable();
+    showToast(contact ? "Contact updated." : "Contact added.");
+  });
+}
+
+// ---------------------------------------------------------------- //
+// Pipelines (Sales, Research, Partnership, Funding, Feedback)
+// ---------------------------------------------------------------- //
+function renderPipelineTabsHtml() {
+  return `
+    <div class="pipeline-tabs" id="pipeline-tabs">
+      ${PIPELINE_NAMES.map(p => `<button class="btn ${p === oppScreenState.pipeline ? '' : 'toggle-off'}" data-pipeline="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join("")}
+    </div>
+  `;
+}
+
+function renderOpportunities() {
+  const stages = pipelineOf(oppScreenState.pipeline).stages;
+  const stageOptions = ["All Stages", ...stages]
+    .map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("");
+
+  return `
+    <div class="header">
+      <h1>Pipelines</h1>
+      <p>Track deals across every pipeline — Sales, Research, Partnership, Funding, and Feedback.</p>
+    </div>
+    ${renderPipelineTabsHtml()}
+    <div class="forecast-bar" id="opp-forecast"></div>
+    <div class="toolbar">
+      <input type="search" id="opp-search" placeholder="Search opportunities..." style="width:240px" value="${escapeHtml(oppScreenState.search)}">
+      <select id="opp-stage-filter">${stageOptions}</select>
+      <div class="spacer"></div>
+      <button class="btn ${oppScreenState.view === 'kanban' ? '' : 'toggle-off'}" id="opp-view-kanban">Kanban</button>
+      <button class="btn ${oppScreenState.view === 'table' ? '' : 'toggle-off'}" id="opp-view-table">Table</button>
+      <button class="btn" id="opp-add-btn">+ Add Opportunity</button>
+    </div>
+    <div id="opp-body"></div>
+  `;
+}
+
+function afterRenderOpportunities() {
+  byId("opp-stage-filter").value = oppScreenState.stageFilter;
+  [...byId("pipeline-tabs").querySelectorAll("button")].forEach(btn => {
+    btn.addEventListener("click", () => {
+      oppScreenState.pipeline = btn.getAttribute("data-pipeline");
+      oppScreenState.stageFilter = "All Stages";
+      refreshCurrentScreen();
+    });
+  });
+  byId("opp-search").addEventListener("input", e => { oppScreenState.search = e.target.value; renderOppBody(); });
+  byId("opp-stage-filter").addEventListener("change", e => { oppScreenState.stageFilter = e.target.value; renderOppBody(); });
+  byId("opp-view-kanban").addEventListener("click", () => { oppScreenState.view = "kanban"; refreshCurrentScreen(); });
+  byId("opp-view-table").addEventListener("click", () => { oppScreenState.view = "table"; refreshCurrentScreen(); });
+  byId("opp-add-btn").addEventListener("click", () => openOppModal(null));
+  renderOppForecast();
+  renderOppBody();
+}
+
+function filteredOpportunities() {
+  let opps = Store.listOpportunities().filter(o => o.pipeline === oppScreenState.pipeline);
+  if (oppScreenState.stageFilter && oppScreenState.stageFilter !== "All Stages") {
+    opps = opps.filter(o => o.stage === oppScreenState.stageFilter);
+  }
+  const q = oppScreenState.search.trim().toLowerCase();
+  if (q) opps = opps.filter(o => Object.values(o).join(" ").toLowerCase().includes(q));
+  return opps;
+}
+
+function renderOppForecast() {
+  const el = byId("opp-forecast");
+  if (!el) return;
+  const pipeline = pipelineOf(oppScreenState.pipeline);
+  const opps = Store.listOpportunities().filter(o => o.pipeline === oppScreenState.pipeline);
+  const open = opps.filter(o => o.stage !== pipeline.won && o.stage !== pipeline.lost);
+  const totalPipeline = open.reduce((s, o) => s + (parseFloat(o.amount) || 0), 0);
+  const weighted = open.reduce((s, o) => s + (parseFloat(o.amount) || 0) * (parseFloat(o.probability) || 0) / 100, 0);
+  const won = opps.filter(o => o.stage === pipeline.won).reduce((s, o) => s + (parseFloat(o.amount) || 0), 0);
+  el.innerHTML = `
+    <div class="forecast-chip"><span class="v">${money(totalPipeline)}</span>Total Value</div>
+    <div class="forecast-chip"><span class="v">${money(weighted)}</span>Weighted Forecast</div>
+    <div class="forecast-chip"><span class="v">${money(won)}</span>Won</div>
+    <div class="forecast-chip"><span class="v">${open.length}</span>Open</div>
+  `;
+}
+
+function renderOppBody() {
+  const el = byId("opp-body");
+  if (!el) return;
+  el.innerHTML = oppScreenState.view === "kanban" ? renderOppKanbanHtml() : renderOppTableHtml();
+  if (oppScreenState.view === "kanban") wireOppKanban();
+  else wireOppTable();
+}
+
+function renderOppKanbanHtml() {
+  const opps = filteredOpportunities();
+  const stages = pipelineOf(oppScreenState.pipeline).stages;
+  const cols = stages.map(stage => {
+    const stageOpps = opps.filter(o => o.stage === stage);
+    const cards = stageOpps.map(o => `
+      <div class="kanban-card" data-id="${o.id}">
+        <div class="name">${escapeHtml(o.name)}</div>
+        <div class="org">${escapeHtml(o.orgName || "(no org)")}</div>
+        <span class="amount">${money(o.amount)}</span><span class="prob">${o.probability || 0}%</span>
+        <select class="opp-stage-select" data-id="${o.id}">
+          ${stages.map(s => `<option value="${escapeHtml(s)}" ${s === o.stage ? "selected" : ""}>${escapeHtml(s)}</option>`).join("")}
+        </select>
+        <div class="kanban-card-actions">
+          <button class="btn tiny outline opp-edit-btn" data-id="${o.id}">Edit</button>
+          <button class="btn tiny danger opp-delete-btn" data-id="${o.id}">Delete</button>
+        </div>
+      </div>
+    `).join("");
+    return `
+      <div class="kanban-col">
+        <div class="kanban-col-header"><span>${escapeHtml(stage)}</span><span class="count">${stageOpps.length}</span></div>
+        <div class="kanban-cards">${cards || '<div class="muted-note">No opportunities.</div>'}</div>
+      </div>
+    `;
+  }).join("");
+  return `<div class="kanban-board">${cols}</div>`;
+}
+
+function wireOppKanban() {
+  const el = byId("opp-body");
+  [...el.querySelectorAll(".opp-stage-select")].forEach(sel => {
+    sel.addEventListener("change", e => {
+      Store.setOpportunityStage(sel.getAttribute("data-id"), sel.value);
+      renderOppForecast();
+      renderOppBody();
+      showToast("Stage updated.");
+    });
+  });
+  [...el.querySelectorAll(".opp-edit-btn")].forEach(btn => {
+    btn.addEventListener("click", e => { e.stopPropagation(); openOppModal(btn.getAttribute("data-id")); });
+  });
+  [...el.querySelectorAll(".opp-delete-btn")].forEach(btn => {
+    btn.addEventListener("click", e => {
+      e.stopPropagation();
+      const id = btn.getAttribute("data-id");
+      if (confirm("Delete this opportunity?")) {
+        Store.deleteOpportunity(id);
+        renderOppForecast();
+        renderOppBody();
+        showToast("Opportunity deleted.");
+      }
+    });
+  });
+}
+
+function renderOppTableHtml() {
+  const opps = filteredOpportunities();
+  const rows = opps.map(o => `
+    <tr data-id="${o.id}">
+      <td>${escapeHtml(o.name)}</td><td>${escapeHtml(o.orgName)}</td>
+      <td><span class="badge" style="background:${stageColor(o.pipeline, o.stage)}">${escapeHtml(o.stage)}</span></td>
+      <td>${money(o.amount)}</td><td>${o.probability || 0}%</td><td>${escapeHtml(o.expectedCloseDate)}</td>
+      <td>${escapeHtml(o.source)}</td>
+      <td>
+        <button class="btn small outline opp-edit-btn" data-id="${o.id}">Edit</button>
+        <button class="btn small danger opp-delete-btn" data-id="${o.id}">Delete</button>
+      </td>
+    </tr>
+  `).join("") || `<tr><td colspan="8" class="muted-note">No opportunities match.</td></tr>`;
+
+  return `
+    <div style="padding:4px 28px 20px;">
+      <div class="card" style="padding:0;">
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Name</th><th>Organization</th><th>Stage</th><th>Amount</th><th>Probability</th><th>Expected Close</th><th>Source</th><th></th></tr></thead>
+            <tbody id="opp-table-body">${rows}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function wireOppTable() {
+  const el = byId("opp-body");
+  [...el.querySelectorAll(".opp-edit-btn")].forEach(btn => {
+    btn.addEventListener("click", e => { e.stopPropagation(); openOppModal(btn.getAttribute("data-id")); });
+  });
+  [...el.querySelectorAll(".opp-delete-btn")].forEach(btn => {
+    btn.addEventListener("click", e => {
+      e.stopPropagation();
+      const id = btn.getAttribute("data-id");
+      if (confirm("Delete this opportunity?")) {
+        Store.deleteOpportunity(id);
+        renderOppForecast();
+        renderOppBody();
+        showToast("Opportunity deleted.");
+      }
+    });
+  });
+}
+
+function openOppModal(oppId) {
+  const opp = oppId ? Store.getOpportunity(oppId) : null;
+  const pipeline = opp ? opp.pipeline : oppScreenState.pipeline;
+  const pipelineOptions = PIPELINE_NAMES.map(p =>
+    `<option value="${escapeHtml(p)}" ${p === pipeline ? "selected" : ""}>${escapeHtml(p)}</option>`
+  ).join("");
+  const stageOptions = pipelineOf(pipeline).stages.map(s =>
+    `<option value="${escapeHtml(s)}" ${opp && opp.stage === s ? "selected" : ""}>${escapeHtml(s)}</option>`
+  ).join("");
+
+  byId("modal-body").innerHTML = `
+    <h2>${opp ? "Edit Opportunity" : "Add Opportunity"}</h2>
+    <div class="field-group"><label>Organization</label><select id="f-org">${orgOptionsHtml(opp ? opp.orgId : "", true)}</select></div>
+    <div class="field-group"><label>Name</label><input type="text" id="f-name" value="${escapeHtml(opp ? opp.name : "")}"></div>
+    <div class="field-row">
+      <div class="field-group"><label>Pipeline</label><select id="f-pipeline">${pipelineOptions}</select></div>
+      <div class="field-group"><label>Stage</label><select id="f-stage">${stageOptions}</select></div>
+    </div>
+    <div class="field-row">
+      <div class="field-group"><label>Probability (%)</label><input type="number" id="f-prob" min="0" max="100" value="${opp ? opp.probability : defaultProbability(pipeline, pipelineOf(pipeline).stages[0])}"></div>
+      <div class="field-group"><label>Amount ($)</label><input type="number" id="f-amount" min="0" value="${opp ? opp.amount : ""}"></div>
+    </div>
+    <div class="field-group"><label>Expected Close Date</label><input type="date" id="f-close" value="${escapeHtml(opp ? opp.expectedCloseDate : "")}"></div>
+    <div class="field-group"><label>Source</label><input type="text" id="f-source" placeholder="Referral, Website, Conference..." value="${escapeHtml(opp ? opp.source : "")}"></div>
+    <div class="field-group"><label>Notes</label><textarea id="f-notes" rows="3">${escapeHtml(opp ? opp.notes : "")}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="modal-cancel">Cancel</button>
+      <button class="btn" id="modal-save">Save</button>
+    </div>
+  `;
+  openModal();
+
+  byId("f-pipeline").addEventListener("change", () => {
+    const newPipeline = byId("f-pipeline").value;
+    const stages = pipelineOf(newPipeline).stages;
+    byId("f-stage").innerHTML = stages.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("");
+    byId("f-prob").value = defaultProbability(newPipeline, stages[0]);
+  });
+  byId("f-stage").addEventListener("change", () => {
+    byId("f-prob").value = defaultProbability(byId("f-pipeline").value, byId("f-stage").value);
+  });
+  byId("modal-cancel").addEventListener("click", closeModal);
+  byId("modal-save").addEventListener("click", () => {
+    const data = {
+      orgId: byId("f-org").value,
+      name: byId("f-name").value.trim(),
+      pipeline: byId("f-pipeline").value,
+      stage: byId("f-stage").value,
+      probability: byId("f-prob").value,
+      amount: byId("f-amount").value,
+      expectedCloseDate: byId("f-close").value,
+      source: byId("f-source").value.trim(),
+      notes: byId("f-notes").value.trim(),
+    };
+    if (!data.name) { alert("Opportunity name is required."); return; }
+    if (opp) Store.updateOpportunity(opp.id, data);
+    else Store.addOpportunity(data);
+    oppScreenState.pipeline = data.pipeline;
+    closeModal();
+    refreshCurrentScreen();
+    showToast(opp ? "Opportunity updated." : "Opportunity added.");
+  });
+}
+
+// ---------------------------------------------------------------- //
+// Activities
+// ---------------------------------------------------------------- //
+function renderActivities() {
+  const typeOptions = ["All Types", ...ACTIVITY_TYPES].map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join("");
+  return `
+    <div class="header">
+      <h1>Activities</h1>
+      <p>Calls, emails, meetings, and demos.</p>
+    </div>
+    <div class="toolbar">
+      <input type="search" id="activity-search" placeholder="Search activities..." style="width:240px" value="${escapeHtml(activityScreenState.search)}">
+      <select id="activity-type-filter">${typeOptions}</select>
+      <div class="spacer"></div>
+      <button class="btn" id="activity-add-btn">+ Add Activity</button>
+    </div>
+    <div style="padding:4px 28px 20px;">
+      <div class="card" style="padding:0;">
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Date</th><th>Type</th><th>Subject</th><th>Organization</th><th>Contact</th><th></th></tr></thead>
+            <tbody id="activity-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function afterRenderActivities() {
+  byId("activity-type-filter").value = activityScreenState.typeFilter;
+  byId("activity-search").addEventListener("input", e => { activityScreenState.search = e.target.value; renderActivityTable(); });
+  byId("activity-type-filter").addEventListener("change", e => { activityScreenState.typeFilter = e.target.value; renderActivityTable(); });
+  byId("activity-add-btn").addEventListener("click", () => openActivityModal(null));
+  renderActivityTable();
+}
+
+function filteredActivities() {
+  let activities = Store.listActivities().slice().sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  if (activityScreenState.typeFilter && activityScreenState.typeFilter !== "All Types") {
+    activities = activities.filter(a => a.type === activityScreenState.typeFilter);
+  }
+  const q = activityScreenState.search.trim().toLowerCase();
+  if (q) activities = activities.filter(a => Object.values(a).join(" ").toLowerCase().includes(q));
+  return activities;
+}
+
+function renderActivityTable() {
+  const tbody = byId("activity-table-body");
+  if (!tbody) return;
+  const activities = filteredActivities();
+  tbody.innerHTML = activities.map(a => {
+    const org = a.orgId ? Store.getOrganization(a.orgId) : null;
+    const contact = a.contactId ? Store.getContact(a.contactId) : null;
+    return `
+      <tr data-id="${a.id}">
+        <td>${escapeHtml(a.date)}</td><td>${escapeHtml(a.type)}</td><td>${escapeHtml(a.subject)}</td>
+        <td>${escapeHtml(org ? org.name : "")}</td><td>${escapeHtml(contact ? contact.firstName + " " + contact.lastName : "")}</td>
+        <td>
+          <button class="btn small outline activity-edit-btn" data-id="${a.id}">Edit</button>
+          <button class="btn small danger activity-delete-btn" data-id="${a.id}">Delete</button>
+        </td>
+      </tr>
+    `;
+  }).join("") || `<tr><td colspan="6" class="muted-note">No activities match.</td></tr>`;
+
+  [...tbody.querySelectorAll(".activity-edit-btn")].forEach(btn => {
+    btn.addEventListener("click", e => { e.stopPropagation(); openActivityModal(btn.getAttribute("data-id")); });
+  });
+  [...tbody.querySelectorAll(".activity-delete-btn")].forEach(btn => {
+    btn.addEventListener("click", e => {
+      e.stopPropagation();
+      if (confirm("Delete this activity?")) {
+        Store.deleteActivity(btn.getAttribute("data-id"));
+        renderActivityTable();
+        showToast("Activity deleted.");
+      }
+    });
+  });
+}
+
+function openActivityModal(activityId) {
+  const activity = activityId ? Store.getActivity(activityId) : null;
+  const typeOptions = ACTIVITY_TYPES.map(t =>
+    `<option value="${escapeHtml(t)}" ${activity && activity.type === t ? "selected" : ""}>${escapeHtml(t)}</option>`
+  ).join("");
+
+  byId("modal-body").innerHTML = `
+    <h2>${activity ? "Edit Activity" : "Add Activity"}</h2>
+    <div class="field-row">
+      <div class="field-group"><label>Type</label><select id="f-type">${typeOptions}</select></div>
+      <div class="field-group"><label>Date</label><input type="date" id="f-date" value="${escapeHtml(activity ? activity.date : todayStr())}"></div>
+    </div>
+    <div class="field-group"><label>Subject</label><input type="text" id="f-subject" value="${escapeHtml(activity ? activity.subject : "")}"></div>
+    <div class="field-group"><label>Organization</label><select id="f-org">${orgOptionsHtml(activity ? activity.orgId : "", true)}</select></div>
+    <div class="field-group"><label>Contact</label><select id="f-contact">${contactOptionsHtml(activity ? activity.orgId : "", activity ? activity.contactId : "")}</select></div>
+    <div class="field-group"><label>Related Opportunity</label><select id="f-opp">${oppOptionsHtml(activity ? activity.orgId : "", activity ? activity.oppId : "")}</select></div>
+    <div class="field-group"><label>Notes</label><textarea id="f-notes" rows="3">${escapeHtml(activity ? activity.notes : "")}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="modal-cancel">Cancel</button>
+      <button class="btn" id="modal-save">Save</button>
+    </div>
+  `;
+  openModal();
+
+  byId("f-org").addEventListener("change", () => {
+    const orgId = byId("f-org").value;
+    byId("f-contact").innerHTML = contactOptionsHtml(orgId, "");
+    byId("f-opp").innerHTML = oppOptionsHtml(orgId, "");
+  });
+
+  byId("modal-cancel").addEventListener("click", closeModal);
+  byId("modal-save").addEventListener("click", () => {
+    const data = {
+      type: byId("f-type").value,
+      date: byId("f-date").value || todayStr(),
+      subject: byId("f-subject").value.trim(),
+      orgId: byId("f-org").value,
+      contactId: byId("f-contact").value,
+      oppId: byId("f-opp").value,
+      notes: byId("f-notes").value.trim(),
+    };
+    if (!data.subject) { alert("Subject is required."); return; }
+    if (activity) Store.updateActivity(activity.id, data);
+    else Store.addActivity(data);
+    closeModal();
+    renderActivityTable();
+    showToast(activity ? "Activity updated." : "Activity added.");
+  });
+}
+
+// ---------------------------------------------------------------- //
+// Follow Ups
+// ---------------------------------------------------------------- //
+function renderFollowUps() {
+  return `
+    <div class="header">
+      <h1>Follow Ups</h1>
+      <p>Stay on top of what's due.</p>
+    </div>
+    <div class="toolbar">
+      <div class="spacer"></div>
+      <button class="btn" id="followup-add-btn">+ Add Follow Up</button>
+    </div>
+    <div id="followup-body"></div>
+  `;
+}
+
+function afterRenderFollowUps() {
+  byId("followup-add-btn").addEventListener("click", () => openFollowUpModal(null));
+  renderFollowUpBody();
+}
+
+function followUpGroupHtml(title, cssClass, items) {
+  if (!items.length) return "";
+  const rows = items.map(f => {
+    const org = f.orgId ? Store.getOrganization(f.orgId) : null;
+    const contact = f.contactId ? Store.getContact(f.contactId) : null;
+    const who = [org ? org.name : "", contact ? contact.firstName + " " + contact.lastName : ""].filter(Boolean).join(" · ");
+    return `
+      <div class="fu-item ${f.status === "Done" ? "done" : ""}" data-id="${f.id}">
+        <input type="checkbox" class="fu-toggle" data-id="${f.id}" ${f.status === "Done" ? "checked" : ""}>
+        <span class="fu-desc">${escapeHtml(f.description)}${who ? " — " + escapeHtml(who) : ""}</span>
+        <span class="fu-meta">${escapeHtml(f.dueDate)}</span>
+        <button class="btn tiny outline fu-edit-btn" data-id="${f.id}">Edit</button>
+        <button class="btn tiny danger fu-delete-btn" data-id="${f.id}">Delete</button>
+      </div>
+    `;
+  }).join("");
+  return `
+    <div class="fu-group-title ${cssClass}"><span>${title}</span><span class="count-pill">${items.length}</span></div>
+    <div class="fu-list">${rows}</div>
+  `;
+}
+
+function renderFollowUpBody() {
+  const el = byId("followup-body");
+  if (!el) return;
+  const today = todayStr();
+  const all = Store.listFollowUps().slice().sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || ""));
+  const open = all.filter(f => f.status !== "Done");
+  const done = all.filter(f => f.status === "Done");
+  const overdue = open.filter(f => f.dueDate && f.dueDate < today);
+  const dueToday = open.filter(f => f.dueDate === today);
+  const upcoming = open.filter(f => f.dueDate && f.dueDate > today);
+  const noDate = open.filter(f => !f.dueDate);
+
+  el.innerHTML =
+    followUpGroupHtml("Overdue", "overdue", overdue) +
+    followUpGroupHtml("Due Today", "today", dueToday) +
+    followUpGroupHtml("Upcoming", "", upcoming.concat(noDate)) +
+    followUpGroupHtml("Done", "", done) +
+    (all.length === 0 ? `<div class="muted-note" style="padding:0 28px;">No follow-ups yet.</div>` : "");
+
+  [...el.querySelectorAll(".fu-toggle")].forEach(cb => {
+    cb.addEventListener("change", () => {
+      Store.toggleFollowUpStatus(cb.getAttribute("data-id"));
+      renderFollowUpBody();
+      showToast("Follow-up updated.");
+    });
+  });
+  [...el.querySelectorAll(".fu-edit-btn")].forEach(btn => {
+    btn.addEventListener("click", () => openFollowUpModal(btn.getAttribute("data-id")));
+  });
+  [...el.querySelectorAll(".fu-delete-btn")].forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (confirm("Delete this follow-up?")) {
+        Store.deleteFollowUp(btn.getAttribute("data-id"));
+        renderFollowUpBody();
+        showToast("Follow-up deleted.");
+      }
+    });
+  });
+}
+
+function openFollowUpModal(followUpId) {
+  const fu = followUpId ? Store.getFollowUp(followUpId) : null;
+
+  byId("modal-body").innerHTML = `
+    <h2>${fu ? "Edit Follow Up" : "Add Follow Up"}</h2>
+    <div class="field-group"><label>Organization</label><select id="f-org">${orgOptionsHtml(fu ? fu.orgId : "", true)}</select></div>
+    <div class="field-group"><label>Contact</label><select id="f-contact">${contactOptionsHtml(fu ? fu.orgId : "", fu ? fu.contactId : "")}</select></div>
+    <div class="field-group"><label>Due Date</label><input type="date" id="f-due" value="${escapeHtml(fu ? fu.dueDate : todayStr())}"></div>
+    <div class="field-group"><label>Description</label><textarea id="f-desc" rows="2">${escapeHtml(fu ? fu.description : "")}</textarea></div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="f-done" ${fu && fu.status === "Done" ? "checked" : ""}>
+      <label for="f-done" style="margin:0;">Done</label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="modal-cancel">Cancel</button>
+      <button class="btn" id="modal-save">Save</button>
+    </div>
+  `;
+  openModal();
+
+  byId("f-org").addEventListener("change", () => {
+    byId("f-contact").innerHTML = contactOptionsHtml(byId("f-org").value, "");
+  });
+
+  byId("modal-cancel").addEventListener("click", closeModal);
+  byId("modal-save").addEventListener("click", () => {
+    const data = {
+      orgId: byId("f-org").value,
+      contactId: byId("f-contact").value,
+      dueDate: byId("f-due").value || todayStr(),
+      description: byId("f-desc").value.trim(),
+      status: byId("f-done").checked ? "Done" : "Open",
+    };
+    if (!data.description) { alert("Description is required."); return; }
+    if (fu) Store.updateFollowUp(fu.id, data);
+    else Store.addFollowUp(data);
+    closeModal();
+    renderFollowUpBody();
+    showToast(fu ? "Follow-up updated." : "Follow-up added.");
+  });
+}
+
+// ---------------------------------------------------------------- //
+// Pilot Programs
+// ---------------------------------------------------------------- //
+function renderPilotPrograms() {
+  return `
+    <div class="header">
+      <h1>Pilot Programs</h1>
+      <p>Track pilot rollouts, participants, and milestones.</p>
+    </div>
+    <div class="toolbar">
+      <div class="spacer"></div>
+      <button class="btn" id="pilot-add-btn">+ Add Pilot Program</button>
+    </div>
+    <div class="pilot-grid" id="pilot-grid"></div>
+  `;
+}
+
+function afterRenderPilotPrograms() {
+  byId("pilot-add-btn").addEventListener("click", () => openPilotModal(null));
+  renderPilotGrid();
+}
+
+function renderPilotGrid() {
+  const grid = byId("pilot-grid");
+  if (!grid) return;
+  const pilots = Store.listPilots();
+  if (!pilots.length) {
+    grid.innerHTML = `<div class="muted-note">No pilot programs yet.</div>`;
+    return;
+  }
+  grid.innerHTML = pilots.map(p => {
+    const pct = p.targetParticipants > 0 ? Math.min(100, Math.round((p.participantCount / p.targetParticipants) * 100)) : 0;
+    const doneCount = (p.milestones || []).filter(m => m.done).length;
+    return `
+      <div class="pilot-card" data-id="${p.id}">
+        <div class="top-row">
+          <div>
+            <div class="name">${escapeHtml(p.name)}</div>
+            <div class="org">${escapeHtml(p.orgName || "(no org)")}</div>
+          </div>
+          <span class="badge" style="background:${PILOT_STATUS_COLORS[p.status] || 'var(--gray)'}">${escapeHtml(p.status)}</span>
+        </div>
+        <div class="stat-line">Participants: ${p.participantCount} / ${p.targetParticipants || "?"}</div>
+        <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+        <div class="stat-line">${escapeHtml(p.startDate || "?")} → ${escapeHtml(p.endDate || "?")}</div>
+        <div class="stat-line">Milestones: ${doneCount}/${(p.milestones || []).length} complete</div>
+        <div class="actions">
+          <button class="btn small outline pilot-edit-btn" data-id="${p.id}">Edit</button>
+          <button class="btn small danger pilot-delete-btn" data-id="${p.id}">Delete</button>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  [...grid.querySelectorAll(".pilot-edit-btn")].forEach(btn => {
+    btn.addEventListener("click", () => openPilotModal(btn.getAttribute("data-id")));
+  });
+  [...grid.querySelectorAll(".pilot-delete-btn")].forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (confirm("Delete this pilot program?")) {
+        Store.deletePilot(btn.getAttribute("data-id"));
+        renderPilotGrid();
+        showToast("Pilot program deleted.");
+      }
+    });
+  });
+}
+
+function renderMilestonesEditor() {
+  const wrap = byId("milestone-list");
+  if (!wrap) return;
+  wrap.innerHTML = modalMilestones.map(m => `
+    <div class="milestone-row ${m.done ? "done" : ""}" data-id="${m.id}">
+      <input type="checkbox" class="ms-toggle" data-id="${m.id}" ${m.done ? "checked" : ""}>
+      <span class="m-title">${escapeHtml(m.title)}</span>
+      <span class="m-date">${escapeHtml(m.dueDate || "")}</span>
+      <button class="btn tiny danger ms-remove" data-id="${m.id}">✕</button>
+    </div>
+  `).join("") || `<div class="muted-note">No milestones yet.</div>`;
+
+  [...wrap.querySelectorAll(".ms-toggle")].forEach(cb => {
+    cb.addEventListener("change", () => {
+      const m = modalMilestones.find(x => x.id === cb.getAttribute("data-id"));
+      if (m) m.done = cb.checked;
+      renderMilestonesEditor();
+    });
+  });
+  [...wrap.querySelectorAll(".ms-remove")].forEach(btn => {
+    btn.addEventListener("click", () => {
+      modalMilestones = modalMilestones.filter(m => m.id !== btn.getAttribute("data-id"));
+      renderMilestonesEditor();
+    });
+  });
+}
+
+function openPilotModal(pilotId) {
+  const pilot = pilotId ? Store.getPilot(pilotId) : null;
+  modalMilestones = pilot ? JSON.parse(JSON.stringify(pilot.milestones || [])) : [];
+  const statusOptions = PILOT_STATUS.map(s =>
+    `<option value="${escapeHtml(s)}" ${pilot && pilot.status === s ? "selected" : ""}>${escapeHtml(s)}</option>`
+  ).join("");
+
+  byId("modal-body").innerHTML = `
+    <h2>${pilot ? "Edit Pilot Program" : "Add Pilot Program"}</h2>
+    <div class="field-group"><label>Organization</label><select id="f-org">${orgOptionsHtml(pilot ? pilot.orgId : "", true)}</select></div>
+    <div class="field-group"><label>Name</label><input type="text" id="f-name" value="${escapeHtml(pilot ? pilot.name : "")}"></div>
+    <div class="field-row">
+      <div class="field-group"><label>Status</label><select id="f-status">${statusOptions}</select></div>
+    </div>
+    <div class="field-row">
+      <div class="field-group"><label>Start Date</label><input type="date" id="f-start" value="${escapeHtml(pilot ? pilot.startDate : "")}"></div>
+      <div class="field-group"><label>End Date</label><input type="date" id="f-end" value="${escapeHtml(pilot ? pilot.endDate : "")}"></div>
+    </div>
+    <div class="field-row">
+      <div class="field-group"><label>Participant Count</label><input type="number" id="f-count" min="0" value="${pilot ? pilot.participantCount : 0}"></div>
+      <div class="field-group"><label>Target Participants</label><input type="number" id="f-target" min="0" value="${pilot ? pilot.targetParticipants : ""}"></div>
+    </div>
+    <div class="field-group"><label>Notes</label><textarea id="f-notes" rows="2">${escapeHtml(pilot ? pilot.notes : "")}</textarea></div>
+    <div class="field-group">
+      <label>Milestones</label>
+      <div id="milestone-list"></div>
+      <div class="field-row" style="margin-top:6px;">
+        <input type="text" id="ms-new-title" placeholder="Milestone title" style="flex:2;">
+        <input type="date" id="ms-new-date" style="flex:1;">
+        <button class="btn small outline" id="ms-add-btn" type="button">+ Add</button>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="modal-cancel">Cancel</button>
+      <button class="btn" id="modal-save">Save</button>
+    </div>
+  `;
+  openModal();
+  renderMilestonesEditor();
+
+  byId("ms-add-btn").addEventListener("click", () => {
+    const title = byId("ms-new-title").value.trim();
+    if (!title) return;
+    modalMilestones.push({ id: uid("MS"), title, dueDate: byId("ms-new-date").value, done: false });
+    byId("ms-new-title").value = "";
+    byId("ms-new-date").value = "";
+    renderMilestonesEditor();
+  });
+
+  byId("modal-cancel").addEventListener("click", closeModal);
+  byId("modal-save").addEventListener("click", () => {
+    const data = {
+      orgId: byId("f-org").value,
+      name: byId("f-name").value.trim(),
+      status: byId("f-status").value,
+      startDate: byId("f-start").value,
+      endDate: byId("f-end").value,
+      participantCount: byId("f-count").value,
+      targetParticipants: byId("f-target").value,
+      notes: byId("f-notes").value.trim(),
+      milestones: modalMilestones,
+    };
+    if (!data.name) { alert("Pilot program name is required."); return; }
+    if (pilot) Store.updatePilot(pilot.id, data);
+    else Store.addPilot(data);
+    closeModal();
+    renderPilotGrid();
+    showToast(pilot ? "Pilot program updated." : "Pilot program added.");
+  });
+}
+
+// ---------------------------------------------------------------- //
+// Partnerships
+// ---------------------------------------------------------------- //
+function renderPartnerships() {
+  return `
+    <div class="header">
+      <h1>Partnerships</h1>
+      <p>Curriculum, clinical, technology, and distribution partners.</p>
+    </div>
+    <div class="toolbar">
+      <input type="search" id="partnership-search" placeholder="Search partnerships..." style="width:260px" value="${escapeHtml(partnershipScreenState.search)}">
+      <div class="spacer"></div>
+      <button class="btn" id="partnership-add-btn">+ Add Partnership</button>
+    </div>
+    <div style="padding:4px 28px 20px;">
+      <div class="card" style="padding:0;">
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Organization</th><th>Type</th><th>Status</th><th>Start Date</th><th>Notes</th><th></th></tr></thead>
+            <tbody id="partnership-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function afterRenderPartnerships() {
+  byId("partnership-search").addEventListener("input", e => { partnershipScreenState.search = e.target.value; renderPartnershipTable(); });
+  byId("partnership-add-btn").addEventListener("click", () => openPartnershipModal(null));
+  renderPartnershipTable();
+}
+
+function renderPartnershipTable() {
+  const tbody = byId("partnership-table-body");
+  if (!tbody) return;
+  let partnerships = Store.listPartnerships();
+  const q = partnershipScreenState.search.trim().toLowerCase();
+  if (q) partnerships = partnerships.filter(p => Object.values(p).join(" ").toLowerCase().includes(q));
+
+  tbody.innerHTML = partnerships.map(p => `
+    <tr data-id="${p.id}">
+      <td>${escapeHtml(p.orgName)}</td><td>${escapeHtml(p.type)}</td><td>${escapeHtml(p.status)}</td>
+      <td>${escapeHtml(p.startDate)}</td><td>${escapeHtml((p.notes || "").slice(0, 60))}</td>
+      <td>
+        <button class="btn small outline partnership-edit-btn" data-id="${p.id}">Edit</button>
+        <button class="btn small danger partnership-delete-btn" data-id="${p.id}">Delete</button>
+      </td>
+    </tr>
+  `).join("") || `<tr><td colspan="6" class="muted-note">No partnerships match.</td></tr>`;
+
+  [...tbody.querySelectorAll(".partnership-edit-btn")].forEach(btn => {
+    btn.addEventListener("click", () => openPartnershipModal(btn.getAttribute("data-id")));
+  });
+  [...tbody.querySelectorAll(".partnership-delete-btn")].forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (confirm("Delete this partnership?")) {
+        Store.deletePartnership(btn.getAttribute("data-id"));
+        renderPartnershipTable();
+        showToast("Partnership deleted.");
+      }
+    });
+  });
+}
+
+function openPartnershipModal(partnershipId) {
+  const partnership = partnershipId ? Store.getPartnership(partnershipId) : null;
+  const typeOptions = PARTNERSHIP_TYPES.map(t =>
+    `<option value="${escapeHtml(t)}" ${partnership && partnership.type === t ? "selected" : ""}>${escapeHtml(t)}</option>`).join("");
+  const statusOptions = PARTNERSHIP_STATUS.map(s =>
+    `<option value="${escapeHtml(s)}" ${partnership && partnership.status === s ? "selected" : ""}>${escapeHtml(s)}</option>`).join("");
+
+  byId("modal-body").innerHTML = `
+    <h2>${partnership ? "Edit Partnership" : "Add Partnership"}</h2>
+    <div class="field-group"><label>Organization</label><select id="f-org">${orgOptionsHtml(partnership ? partnership.orgId : "", true)}</select></div>
+    <div class="field-row">
+      <div class="field-group"><label>Type</label><select id="f-type">${typeOptions}</select></div>
+      <div class="field-group"><label>Status</label><select id="f-status">${statusOptions}</select></div>
+    </div>
+    <div class="field-group"><label>Start Date</label><input type="date" id="f-start" value="${escapeHtml(partnership ? partnership.startDate : "")}"></div>
+    <div class="field-group"><label>Notes</label><textarea id="f-notes" rows="3">${escapeHtml(partnership ? partnership.notes : "")}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="modal-cancel">Cancel</button>
+      <button class="btn" id="modal-save">Save</button>
+    </div>
+  `;
+  openModal();
+
+  byId("modal-cancel").addEventListener("click", closeModal);
+  byId("modal-save").addEventListener("click", () => {
+    const data = {
+      orgId: byId("f-org").value,
+      type: byId("f-type").value,
+      status: byId("f-status").value,
+      startDate: byId("f-start").value,
+      notes: byId("f-notes").value.trim(),
+    };
+    if (!data.orgId) { alert("Please select an organization."); return; }
+    if (partnership) Store.updatePartnership(partnership.id, data);
+    else Store.addPartnership(data);
+    closeModal();
+    renderPartnershipTable();
+    showToast(partnership ? "Partnership updated." : "Partnership added.");
+  });
+}
+
+// ---------------------------------------------------------------- //
+// Grant Tracker
+// ---------------------------------------------------------------- //
+function renderGrantTracker() {
+  return `
+    <div class="header">
+      <h1>Grant Tracker</h1>
+      <p>Funding opportunities and application status.</p>
+    </div>
+    <div class="toolbar">
+      <input type="search" id="grant-search" placeholder="Search grants..." style="width:260px" value="${escapeHtml(grantScreenState.search)}">
+      <div class="spacer"></div>
+      <button class="btn" id="grant-add-btn">+ Add Grant</button>
+    </div>
+    <div style="padding:4px 28px 20px;">
+      <div class="card" style="padding:0;">
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Name</th><th>Funder</th><th>Amount</th><th>Status</th><th>Deadline</th><th>Organization</th><th></th></tr></thead>
+            <tbody id="grant-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function afterRenderGrantTracker() {
+  byId("grant-search").addEventListener("input", e => { grantScreenState.search = e.target.value; renderGrantTable(); });
+  byId("grant-add-btn").addEventListener("click", () => openGrantModal(null));
+  renderGrantTable();
+}
+
+function renderGrantTable() {
+  const tbody = byId("grant-table-body");
+  if (!tbody) return;
+  let grants = Store.listGrants().slice().sort((a, b) => (a.deadline || "9999").localeCompare(b.deadline || "9999"));
+  const q = grantScreenState.search.trim().toLowerCase();
+  if (q) grants = grants.filter(g => Object.values(g).join(" ").toLowerCase().includes(q));
+
+  const today = todayStr();
+  tbody.innerHTML = grants.map(g => {
+    const overdue = g.deadline && g.deadline < today && g.status !== "Awarded" && g.status !== "Declined";
+    return `
+      <tr data-id="${g.id}">
+        <td>${escapeHtml(g.name)}</td><td>${escapeHtml(g.funder)}</td><td>${money(g.amount)}</td>
+        <td><span class="badge" style="background:${GRANT_STATUS_COLORS[g.status] || 'var(--gray)'}">${escapeHtml(g.status)}</span></td>
+        <td style="${overdue ? 'color:var(--danger);font-weight:700;' : ''}">${escapeHtml(g.deadline)}</td>
+        <td>${escapeHtml(g.orgName)}</td>
+        <td>
+          <button class="btn small outline grant-edit-btn" data-id="${g.id}">Edit</button>
+          <button class="btn small danger grant-delete-btn" data-id="${g.id}">Delete</button>
+        </td>
+      </tr>
+    `;
+  }).join("") || `<tr><td colspan="7" class="muted-note">No grants match.</td></tr>`;
+
+  [...tbody.querySelectorAll(".grant-edit-btn")].forEach(btn => {
+    btn.addEventListener("click", () => openGrantModal(btn.getAttribute("data-id")));
+  });
+  [...tbody.querySelectorAll(".grant-delete-btn")].forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (confirm("Delete this grant?")) {
+        Store.deleteGrant(btn.getAttribute("data-id"));
+        renderGrantTable();
+        showToast("Grant deleted.");
+      }
+    });
+  });
+}
+
+function openGrantModal(grantId) {
+  const grant = grantId ? Store.getGrant(grantId) : null;
+  const statusOptions = GRANT_STATUS.map(s =>
+    `<option value="${escapeHtml(s)}" ${grant && grant.status === s ? "selected" : ""}>${escapeHtml(s)}</option>`).join("");
+
+  byId("modal-body").innerHTML = `
+    <h2>${grant ? "Edit Grant" : "Add Grant"}</h2>
+    <div class="field-group"><label>Name</label><input type="text" id="f-name" value="${escapeHtml(grant ? grant.name : "")}"></div>
+    <div class="field-group"><label>Funder</label><input type="text" id="f-funder" value="${escapeHtml(grant ? grant.funder : "")}"></div>
+    <div class="field-row">
+      <div class="field-group"><label>Amount ($)</label><input type="number" id="f-amount" min="0" value="${grant ? grant.amount : ""}"></div>
+      <div class="field-group"><label>Deadline</label><input type="date" id="f-deadline" value="${escapeHtml(grant ? grant.deadline : "")}"></div>
+    </div>
+    <div class="field-group"><label>Status</label><select id="f-status">${statusOptions}</select></div>
+    <div class="field-group"><label>Organization (optional)</label><select id="f-org">${orgOptionsHtml(grant ? grant.orgId : "", true)}</select></div>
+    <div class="field-group"><label>Notes</label><textarea id="f-notes" rows="3">${escapeHtml(grant ? grant.notes : "")}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="modal-cancel">Cancel</button>
+      <button class="btn" id="modal-save">Save</button>
+    </div>
+  `;
+  openModal();
+
+  byId("modal-cancel").addEventListener("click", closeModal);
+  byId("modal-save").addEventListener("click", () => {
+    const data = {
+      name: byId("f-name").value.trim(),
+      funder: byId("f-funder").value.trim(),
+      amount: byId("f-amount").value,
+      deadline: byId("f-deadline").value,
+      status: byId("f-status").value,
+      orgId: byId("f-org").value,
+      notes: byId("f-notes").value.trim(),
+    };
+    if (!data.name) { alert("Grant name is required."); return; }
+    if (grant) Store.updateGrant(grant.id, data);
+    else Store.addGrant(data);
+    closeModal();
+    renderGrantTable();
+    showToast(grant ? "Grant updated." : "Grant added.");
+  });
+}
+
+// ---------------------------------------------------------------- //
+// Reports
+// ---------------------------------------------------------------- //
+function barChartHtml(entries, opts) {
+  opts = opts || {};
+  const max = Math.max(1, ...entries.map(e => e.value));
+  if (!entries.length) return `<div class="muted-note">No data yet.</div>`;
+  return entries.map(e => `
+    <div class="chart-row">
+      <div class="chart-label">${escapeHtml(e.label)}</div>
+      <div class="chart-track"><div class="chart-fill" style="width:${Math.max(2, Math.round((e.value / max) * 100))}%; background:${e.color || 'var(--accent)'}"></div></div>
+      <div class="chart-value">${opts.money ? money(e.value) : e.value}</div>
+    </div>
+  `).join("");
+}
+
+function renderReports() {
+  const allOpps = Store.listOpportunities();
+  const reportPipeline = pipelineOf(reportsScreenState.pipeline);
+  const pipelineOpps = allOpps.filter(o => o.pipeline === reportsScreenState.pipeline);
+
+  const pipelineEntries = reportPipeline.stages.map(stage => ({
+    label: stage, value: pipelineOpps.filter(o => o.stage === stage).reduce((s, o) => s + (parseFloat(o.amount) || 0), 0),
+    color: stageColor(reportsScreenState.pipeline, stage),
+  }));
+
+  // Revenue / Sales by Month / Lead Sources are scoped to the Sales pipeline,
+  // since that's the only pipeline where "amount" means dollars of revenue.
+  const salesOpps = allOpps.filter(o => o.pipeline === "Sales");
+  const closedWon = salesOpps.filter(o => o.stage === PIPELINES.Sales.won);
+  const totalRevenue = closedWon.reduce((s, o) => s + (parseFloat(o.amount) || 0), 0);
+  const revenueByMonth = {};
+  closedWon.forEach(o => {
+    const key = monthKey(o.expectedCloseDate) || monthKey(o.createdDate);
+    if (key) revenueByMonth[key] = (revenueByMonth[key] || 0) + (parseFloat(o.amount) || 0);
+  });
+  const revenueEntries = Object.keys(revenueByMonth).sort().map(k => ({ label: monthLabel(k), value: revenueByMonth[k] }));
+
+  const salesByMonth = {};
+  salesOpps.forEach(o => {
+    const key = monthKey(o.createdDate);
+    if (key) salesByMonth[key] = (salesByMonth[key] || 0) + 1;
+  });
+  const salesEntries = Object.keys(salesByMonth).sort().map(k => ({ label: monthLabel(k), value: salesByMonth[k] }));
+
+  const bySource = {};
+  salesOpps.forEach(o => {
+    const s = o.source || "Unspecified";
+    bySource[s] = (bySource[s] || 0) + 1;
+  });
+  const sourceEntries = Object.entries(bySource).sort((a, b) => b[1] - a[1]).map(([label, value]) => ({ label, value }));
+
+  const pipelineSelectOptions = PIPELINE_NAMES.map(p =>
+    `<option value="${escapeHtml(p)}" ${p === reportsScreenState.pipeline ? "selected" : ""}>${escapeHtml(p)}</option>`
+  ).join("");
+
+  return `
+    <div class="header">
+      <h1>Reports</h1>
+      <p>Pipeline, revenue, and lead-source trends.</p>
+    </div>
+    <div class="report-section reports-grid">
+      <div class="card">
+        <h3>Pipeline by Stage</h3>
+        <select id="report-pipeline-select" style="margin-bottom:8px;">${pipelineSelectOptions}</select>
+        ${barChartHtml(pipelineEntries, { money: true })}
+      </div>
+      <div class="card">
+        <h3>Revenue (Closed Won: ${money(totalRevenue)})</h3>
+        <div class="card-caption">Sales pipeline only</div>
+        ${barChartHtml(revenueEntries, { money: true })}
+      </div>
+      <div class="card">
+        <h3>Sales by Month (opportunities created)</h3>
+        <div class="card-caption">Sales pipeline only</div>
+        ${barChartHtml(salesEntries)}
+      </div>
+      <div class="card">
+        <h3>Lead Sources</h3>
+        <div class="card-caption">Sales pipeline only</div>
+        ${barChartHtml(sourceEntries)}
+      </div>
+    </div>
+  `;
+}
+
+function afterRenderReports() {
+  byId("report-pipeline-select").addEventListener("change", e => {
+    reportsScreenState.pipeline = e.target.value;
+    refreshCurrentScreen();
+  });
+}
+
+// ---------------------------------------------------------------- //
+// Settings (Export / Import / backup)
+// ---------------------------------------------------------------- //
+function renderSettings() {
+  return `
+    <div class="header">
+      <h1>Settings</h1>
+      <p>Backups and data management. Your data lives in this browser only until you export it.</p>
+    </div>
+    <div class="settings-block">
+      <div class="card">
+        <h3>Export to Excel</h3>
+        <p>Download a real .xlsx file with everything — Organizations, Contacts, Opportunities, Activities,
+        Follow-ups, Pilot Programs, Partnerships, and Grants. Keep this file somewhere safe (Dropbox, iCloud,
+        an external drive) as your backup.</p>
+        <button class="btn" id="export-btn">Download ChronicTraceCRM.xlsx</button>
+      </div>
+      <div class="card">
+        <h3>Import from Excel</h3>
+        <p>Load data from a previously exported .xlsx file. This replaces everything currently in the browser.</p>
+        <input type="file" id="import-file" accept=".xlsx,.xls">
+      </div>
+      <div class="card">
+        <h3>Clear All Data</h3>
+        <p>Removes everything and reloads the sample data. This cannot be undone unless you've exported a backup first.</p>
+        <button class="btn danger" id="clear-btn">Clear &amp; Reset</button>
+      </div>
+    </div>
+  `;
+}
+
+function afterRenderSettings() {
+  byId("export-btn").addEventListener("click", exportToExcel);
+  byId("import-file").addEventListener("change", e => {
+    const file = e.target.files[0];
+    if (file) importFromExcel(file);
+  });
+  byId("clear-btn").addEventListener("click", () => {
+    if (confirm("Clear all data and reload sample data? This cannot be undone.")) {
+      localStorage.removeItem(STORAGE_KEY);
+      Store.load();
+      showToast("Data cleared and reset.");
+      refreshCurrentScreen();
+    }
+  });
+}
+
+const SHEET_COLUMNS = {
+  Organizations: ["OrgID","Name","Type","Industry","Address","City","State","Zip","Phone","Website","Notes","CreatedDate","LastContactDate"],
+  Contacts: ["ContactID","OrgID","OrgName","FirstName","LastName","Title","Email","Phone","DecisionMaker","Notes","CreatedDate","LastContactDate"],
+  Opportunities: ["OppID","OrgID","OrgName","Pipeline","Name","Stage","Amount","Probability","ExpectedCloseDate","Source","Notes","CreatedDate"],
+  Activities: ["ActivityID","OrgID","ContactID","OppID","Type","Date","Subject","Notes"],
+  FollowUps: ["FollowUpID","OrgID","ContactID","DueDate","Description","Status","CreatedDate"],
+  PilotPrograms: ["PilotID","OrgID","OrgName","Name","Status","StartDate","EndDate","ParticipantCount","TargetParticipants","Notes","MilestonesJSON","CreatedDate"],
+  Partnerships: ["PartnershipID","OrgID","OrgName","Type","Status","StartDate","Notes","CreatedDate"],
+  Grants: ["GrantID","Name","Funder","Amount","Status","Deadline","OrgID","OrgName","Notes","CreatedDate"],
+};
+
+function exportToExcel() {
+  if (typeof XLSX === "undefined") {
+    alert("Couldn't load the Excel library (no internet connection?). Try again when you're online.");
+    return;
+  }
+  const orgRows = Store.listOrganizations().map(o => ({
+    OrgID: o.id, Name: o.name, Type: o.type, Industry: o.industry, Address: o.address,
+    City: o.city, State: o.state, Zip: o.zip, Phone: o.phone, Website: o.website,
+    Notes: o.notes, CreatedDate: o.createdDate, LastContactDate: o.lastContactDate,
+  }));
+  const contactRows = Store.listContacts().map(c => ({
+    ContactID: c.id, OrgID: c.orgId, OrgName: c.orgName, FirstName: c.firstName, LastName: c.lastName,
+    Title: c.title, Email: c.email, Phone: c.phone, DecisionMaker: c.decisionMaker ? "Y" : "N",
+    Notes: c.notes, CreatedDate: c.createdDate, LastContactDate: c.lastContactDate,
+  }));
+  const oppRows = Store.listOpportunities().map(o => ({
+    OppID: o.id, OrgID: o.orgId, OrgName: o.orgName, Pipeline: o.pipeline, Name: o.name, Stage: o.stage, Amount: o.amount,
+    Probability: o.probability, ExpectedCloseDate: o.expectedCloseDate, Source: o.source, Notes: o.notes,
+    CreatedDate: o.createdDate,
+  }));
+  const activityRows = Store.listActivities().map(a => ({
+    ActivityID: a.id, OrgID: a.orgId, ContactID: a.contactId, OppID: a.oppId, Type: a.type,
+    Date: a.date, Subject: a.subject, Notes: a.notes,
+  }));
+  const followUpRows = Store.listFollowUps().map(f => ({
+    FollowUpID: f.id, OrgID: f.orgId, ContactID: f.contactId, DueDate: f.dueDate,
+    Description: f.description, Status: f.status, CreatedDate: f.createdDate,
+  }));
+  const pilotRows = Store.listPilots().map(p => ({
+    PilotID: p.id, OrgID: p.orgId, OrgName: p.orgName, Name: p.name, Status: p.status,
+    StartDate: p.startDate, EndDate: p.endDate, ParticipantCount: p.participantCount,
+    TargetParticipants: p.targetParticipants, Notes: p.notes,
+    MilestonesJSON: JSON.stringify(p.milestones || []), CreatedDate: p.createdDate,
+  }));
+  const partnershipRows = Store.listPartnerships().map(p => ({
+    PartnershipID: p.id, OrgID: p.orgId, OrgName: p.orgName, Type: p.type, Status: p.status,
+    StartDate: p.startDate, Notes: p.notes, CreatedDate: p.createdDate,
+  }));
+  const grantRows = Store.listGrants().map(g => ({
+    GrantID: g.id, Name: g.name, Funder: g.funder, Amount: g.amount, Status: g.status,
+    Deadline: g.deadline, OrgID: g.orgId, OrgName: g.orgName, Notes: g.notes, CreatedDate: g.createdDate,
+  }));
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(orgRows, { header: SHEET_COLUMNS.Organizations }), "Organizations");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(contactRows, { header: SHEET_COLUMNS.Contacts }), "Contacts");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(oppRows, { header: SHEET_COLUMNS.Opportunities }), "Opportunities");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(activityRows, { header: SHEET_COLUMNS.Activities }), "Activities");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(followUpRows, { header: SHEET_COLUMNS.FollowUps }), "FollowUps");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pilotRows, { header: SHEET_COLUMNS.PilotPrograms }), "PilotPrograms");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(partnershipRows, { header: SHEET_COLUMNS.Partnerships }), "Partnerships");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(grantRows, { header: SHEET_COLUMNS.Grants }), "Grants");
+
+  XLSX.writeFile(wb, "ChronicTraceCRM.xlsx");
+  showToast("Exported ChronicTraceCRM.xlsx");
+}
+
+function importFromExcel(file) {
+  if (typeof XLSX === "undefined") {
+    alert("Couldn't load the Excel library (no internet connection?). Try again when you're online.");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = evt => {
+    try {
+      const data = new Uint8Array(evt.target.result);
+      const wb = XLSX.read(data, { type: "array" });
+      const sheetRows = name => wb.Sheets[name] ? XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: "" }) : [];
+
+      const orgRows = sheetRows("Organizations");
+      const contactRows = sheetRows("Contacts");
+      const oppRows = sheetRows("Opportunities");
+      const activityRows = sheetRows("Activities");
+      const followUpRows = sheetRows("FollowUps");
+      const pilotRows = sheetRows("PilotPrograms");
+      const partnershipRows = sheetRows("Partnerships");
+      const grantRows = sheetRows("Grants");
+
+      if (!orgRows.length && !contactRows.length) {
+        alert("This file doesn't have Organizations or Contacts sheets.");
+        return;
+      }
+
+      const organizations = orgRows.map(r => ({
+        id: String(r.OrgID || uid("ORG")), name: r.Name || "", type: r.Type || "", industry: r.Industry || "",
+        address: r.Address || "", city: r.City || "", state: r.State || "", zip: String(r.Zip || ""),
+        phone: String(r.Phone || ""), website: r.Website || "", notes: r.Notes || "",
+        createdDate: String(r.CreatedDate || todayStr()), lastContactDate: String(r.LastContactDate || ""),
+      }));
+      const contacts = contactRows.map(r => ({
+        id: String(r.ContactID || uid("CON")), orgId: String(r.OrgID || ""), orgName: r.OrgName || "",
+        firstName: r.FirstName || "", lastName: r.LastName || "", title: r.Title || "",
+        email: r.Email || "", phone: String(r.Phone || ""),
+        decisionMaker: String(r.DecisionMaker || "").toLowerCase().startsWith("y"),
+        notes: r.Notes || "", createdDate: String(r.CreatedDate || todayStr()), lastContactDate: String(r.LastContactDate || ""),
+      }));
+      const opportunities = oppRows.map(r => {
+        const pipeline = r.Pipeline && PIPELINES[r.Pipeline] ? r.Pipeline : "Sales";
+        return {
+          id: String(r.OppID || uid("OPP")), orgId: String(r.OrgID || ""), orgName: r.OrgName || "",
+          pipeline, name: r.Name || "", stage: r.Stage || pipelineOf(pipeline).stages[0], amount: parseFloat(r.Amount) || 0,
+          probability: parseFloat(r.Probability) || 0, expectedCloseDate: String(r.ExpectedCloseDate || ""),
+          source: r.Source || "", notes: r.Notes || "", createdDate: String(r.CreatedDate || todayStr()),
+        };
+      });
+      const activities = activityRows.map(r => ({
+        id: String(r.ActivityID || uid("ACT")), orgId: String(r.OrgID || ""), contactId: String(r.ContactID || ""),
+        oppId: String(r.OppID || ""), type: r.Type || ACTIVITY_TYPES[0], date: String(r.Date || todayStr()),
+        subject: r.Subject || "", notes: r.Notes || "",
+      }));
+      const followUps = followUpRows.map(r => ({
+        id: String(r.FollowUpID || uid("FUP")), orgId: String(r.OrgID || ""), contactId: String(r.ContactID || ""),
+        dueDate: String(r.DueDate || ""), description: r.Description || "", status: r.Status || "Open",
+        createdDate: String(r.CreatedDate || todayStr()),
+      }));
+      const pilots = pilotRows.map(r => {
+        let milestones = [];
+        try { milestones = JSON.parse(r.MilestonesJSON || "[]"); } catch (e) { milestones = []; }
+        return {
+          id: String(r.PilotID || uid("PIL")), orgId: String(r.OrgID || ""), orgName: r.OrgName || "",
+          name: r.Name || "", status: r.Status || PILOT_STATUS[0], startDate: String(r.StartDate || ""),
+          endDate: String(r.EndDate || ""), participantCount: parseInt(r.ParticipantCount) || 0,
+          targetParticipants: parseInt(r.TargetParticipants) || 0, notes: r.Notes || "",
+          milestones, createdDate: String(r.CreatedDate || todayStr()),
+        };
+      });
+      const partnerships = partnershipRows.map(r => ({
+        id: String(r.PartnershipID || uid("PART")), orgId: String(r.OrgID || ""), orgName: r.OrgName || "",
+        type: r.Type || PARTNERSHIP_TYPES[0], status: r.Status || PARTNERSHIP_STATUS[0],
+        startDate: String(r.StartDate || ""), notes: r.Notes || "", createdDate: String(r.CreatedDate || todayStr()),
+      }));
+      const grants = grantRows.map(r => ({
+        id: String(r.GrantID || uid("GRANT")), name: r.Name || "", funder: r.Funder || "",
+        amount: parseFloat(r.Amount) || 0, status: r.Status || GRANT_STATUS[0], deadline: String(r.Deadline || ""),
+        orgId: String(r.OrgID || ""), orgName: r.OrgName || "", notes: r.Notes || "",
+        createdDate: String(r.CreatedDate || todayStr()),
+      }));
+
+      const counts = `${organizations.length} organization(s), ${contacts.length} contact(s), ${opportunities.length} opportunit(y/ies), ` +
+        `${activities.length} activit(y/ies), ${followUps.length} follow-up(s), ${pilots.length} pilot(s), ` +
+        `${partnerships.length} partnership(s), ${grants.length} grant(s)`;
+      if (!confirm(`Import ${counts}? This replaces all current data.`)) return;
+
+      Store.replaceAll({ organizations, contacts, opportunities, activities, followUps, pilots, partnerships, grants });
+      showToast("Import complete.");
+      refreshCurrentScreen();
+    } catch (err) {
+      alert("Couldn't read that file: " + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ---------------------------------------------------------------- //
+// Coming soon placeholder (kept as a fallback; no nav items use it now)
+// ---------------------------------------------------------------- //
+function renderComingSoon(name) {
+  return `
+    <div class="header">
+      <h1>${escapeHtml(name)}</h1>
+      <p>This section hasn't been built yet.</p>
+    </div>
+    <div style="padding:0 28px;color:var(--muted);font-size:14px;">
+      ${escapeHtml(name)} is scaffolded in the navigation and will be added in a future phase.
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------- //
+// Modal helpers
+// ---------------------------------------------------------------- //
+function openModal() { byId("modal-overlay").classList.add("open"); }
+function closeModal() { byId("modal-overlay").classList.remove("open"); byId("modal-body").innerHTML = ""; }
+byIdSafeInit();
+function byIdSafeInit() {
+  document.addEventListener("click", e => {
+    if (e.target && e.target.id === "modal-overlay") closeModal();
+  });
+}
+
+// ---------------------------------------------------------------- //
+// Boot
+// ---------------------------------------------------------------- //
+function initApp() {
+  Store.load();
+  renderSidebar();
+  showScreen("Dashboard");
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initApp);
+} else {
+  initApp();
+}
+</script>
+</body>
+</html>

@@ -1,74 +1,100 @@
-# Chronic Trace CRM — web deployment
+# Chronic Trace CRM
 
-This folder is a clean, deploy-ready copy of the CRM: just `index.html`, a
-`vercel.json`, and a `.gitignore`. On purpose, it does **not** include
-`app.py` / `data_manager.py` / `requirements.txt` — those are the separate
-Python desktop app, and having them in the same repo is what caused Vercel's
-earlier error (it saw a `requirements.txt` and tried to run the folder as a
-Python web service instead of serving static files).
+A full CRM that runs entirely as one HTML file — no installs, no server,
+no database. Double-click `ChronicTraceCRM.html` to open it in your browser
+and it just works.
 
-I verified `index.html` serves correctly from a local static server (200
-response, correct title, byte-identical to the source file) before handing
-this off.
+## Open it
 
-## Important: what hosting this actually gives you
+Double-click `ChronicTraceCRM.html` (or right-click → Open With → your
+browser). Requires an internet connection the first time you open it (it
+loads a small Excel-reading library from a CDN); everything else works
+offline.
 
-This is a static site — all the CRM's data still lives in each visitor's own
-browser (localStorage), exactly like the local file did. Deploying it to a
-URL does **not** create a shared database. If you open the Vercel URL on
-your phone and on your laptop, they'll each have their own independent copy
-of the data (starting from the same sample data, then diverging). Use
-**Settings → Export to Excel** to move data between them, same as before.
+## What's included
 
-If you actually want multiple people or devices sharing one live dataset,
-that requires a real backend + database — a different (bigger) build. Let me
-know if that's what you're after and I'll scope it separately.
+Every section from the original plan is now built:
 
-## 1. Push this folder to GitHub
+- **Dashboard** — total organizations, contacts, decision makers, total
+  pipeline, expected (weighted) revenue, and win rate (Sales pipeline),
+  organizations by type, opportunities by pipeline, activities/follow-ups
+  due today and overdue, recently added organizations.
+- **Organizations** — searchable/filterable table, add/edit/delete, notes,
+  detail panel showing linked contacts and opportunities.
+- **Contacts** — searchable table, add/edit/delete, linked to an
+  organization, decision-maker flag.
+- **Pipelines** — HubSpot-style multiple pipelines, each with its own stages:
+  Sales (Prospecting → Qualification → Proposal Sent → Negotiation → Closed
+  Won/Lost), Research (Idea → Literature Review → Study Design → IRB
+  Approval → Data Collection → Published/Discontinued), Partnership
+  (Prospecting → Discussions → Agreement Drafting → Active/Ended), Funding
+  (Researching → Preparing Application → Applied → Awarded/Declined), and
+  Feedback (Collected → Under Review → Actioned → Published/Archived).
+  Switch pipelines with tabs at the top; each shows its own Kanban board (with
+  a per-card stage dropdown), table view, and forecast summary. Deals from
+  every pipeline can still link to an organization, and Activities can link
+  to a deal from any of them.
+- **Activities** — log of calls, emails, meetings, and demos, linked to an
+  organization, contact, and optionally an opportunity.
+- **Follow Ups** — grouped into Overdue, Due Today, Upcoming, and Done, with
+  a one-click checkbox to mark complete.
+- **Pilot Programs** — cards showing status, participant count vs. target
+  with a progress bar, start/end dates, and a milestone checklist you can
+  add to, check off, or remove.
+- **Partnerships** — type (Curriculum/Clinical/Technology/Distribution),
+  status, start date, notes, linked to an organization.
+- **Grant Tracker** — funder, amount, status, deadline (overdue deadlines
+  highlighted in red), optionally linked to an organization.
+- **Reports** — pipeline-by-stage (pick any of the 5 pipelines), revenue by
+  month (Sales pipeline, closed-won), sales by month (Sales pipeline
+  opportunities created), and lead sources (Sales pipeline) — all as simple
+  bar charts, no extra dependency. Revenue/Sales-by-month/Lead-Sources are
+  scoped to the Sales pipeline since it's the only one where "amount"
+  reliably means dollars.
+- **Settings** — export everything to a real `.xlsx` backup, import it back
+  in, or clear and reset to sample data.
 
-From this folder:
+Sample data is preloaded (3 organizations, 3 contacts, 8 opportunities spread
+across all 5 pipelines, activities, follow-ups, one pilot program with
+milestones, one partnership, one grant) so you can see how everything looks
+and connects. Clear it from Settings whenever you're ready for real data.
 
-```bash
-cd ChronicTraceCRM-Web
-git init
-git add .
-git commit -m "Chronic Trace CRM — static web app"
-git branch -M main
-```
+If you have data saved from an earlier version of this CRM (before
+pipelines existed), it loads in fine — every existing opportunity is
+automatically treated as a "Sales" pipeline deal, no data is lost.
 
-Create a new empty repo on GitHub (github.com → New repository — don't
-initialize it with a README, since you already have files locally). Then:
+## Your data
 
-```bash
-git remote add origin https://github.com/<your-username>/<your-repo-name>.git
-git push -u origin main
-```
+Everything auto-saves to this browser's local storage as you work — closing
+and reopening the file keeps your data, as long as you use the same browser
+on the same computer. Because it's not written to a file on disk
+automatically, get in the habit of using **Settings → Export to Excel**
+occasionally, especially before switching computers or browsers. Import
+brings a previously exported file straight back in, sheets and all.
 
-## 2. Deploy to Vercel
+## How it's built
 
-**Option A — Vercel dashboard (easiest):**
+Single self-contained file, vanilla HTML/CSS/JS, no build step, no
+framework. Everything reads and writes through one `Store` object (mirroring
+the shape of a proper backend), which is what makes the whole thing testable
+even outside a browser. All the domain logic — CRUD for organizations,
+contacts, opportunities, activities, follow-ups, pilots, partnerships,
+grants, plus the dashboard metrics and Excel export/import — lives in that
+`Store` object and a matching set of `render*()` functions, one per screen.
 
-1. Go to vercel.com and sign in (GitHub login is simplest).
-2. "Add New" → "Project" → import the GitHub repo you just pushed.
-3. Framework Preset: choose **Other** (or leave it — Vercel auto-detects
-   static sites when there's no `package.json`).
-4. Leave Build Command and Output Directory blank/default.
-5. Click **Deploy**. You'll get a `*.vercel.app` URL in under a minute.
+## A note on the other files in this folder
 
-**Option B — Vercel CLI:**
+`app.py`, `data_manager.py`, `requirements.txt`, and `data/ChronicTraceCRM.xlsx`
+are an earlier Python/CustomTkinter desktop version that only has Dashboard,
+Organizations, and Contacts — it was not updated with this round's new
+sections. `ChronicTraceCRM.html` is the current, complete version. Ignore
+the Python files unless you specifically want the installable desktop
+version instead of the browser one.
 
-```bash
-npm install -g vercel
-cd ChronicTraceCRM-Web
-vercel login
-vercel        # deploys a preview
-vercel --prod # promotes to your production URL
-```
+## What's next
 
-Either way, every time you `git push` to `main`, Vercel automatically
-redeploys — no manual steps after the first setup.
-
-## Custom domain (optional)
-
-In the Vercel project → Settings → Domains, you can attach a domain you own
-(e.g. `crm.chronictrace.com`) instead of the `*.vercel.app` URL.
+The CRM itself is feature-complete against the original plan. From here,
+reasonable next steps would be things like: recurring/scheduled follow-up
+reminders, file attachments on organizations or pilots, a calendar view
+instead of grouped lists for follow-ups, or wiring this up to a real backend
+if you outgrow browser storage. Let me know if you want any of that.
