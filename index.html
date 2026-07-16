@@ -88,10 +88,41 @@
   .metric-card .value { font-size: 26px; font-weight: 700; }
   .metric-card .label { font-size: 13px; color: var(--muted); margin-top: 4px; }
 
+  .mini-stats-strip {
+    display: flex; flex-wrap: wrap; gap: 6px 22px; padding: 2px 28px 18px; font-size: 12px; color: var(--muted);
+  }
+  .mini-stats-strip .stat strong { color: var(--muted); font-weight: 700; font-size: 13px; }
+
   .body-grid {
     display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 12px 28px 20px; align-items: start;
   }
   .body-grid.orgs-grid { grid-template-columns: 3fr 2fr; }
+  .body-grid.three-col { grid-template-columns: 1fr 1fr 1fr; }
+  .body-grid.single { grid-template-columns: 1fr; }
+  .body-grid.dash-main { grid-template-columns: 2fr 1fr; align-items: stretch; }
+  .body-grid.dash-main .dash-left { display: flex; flex-direction: column; gap: 12px; }
+  .body-grid.dash-main .dash-right { display: flex; flex-direction: column; }
+  .body-grid.dash-main .dash-right .card { flex: 1; display: flex; flex-direction: column; }
+  .body-grid.dash-main .dash-right .todo-list { flex: 1; max-height: none; }
+
+  .todo-list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
+  .todo-item {
+    font-size: 12px; padding: 7px 8px; border-radius: 8px; cursor: pointer;
+    border: 1px solid transparent; transition: background 0.12s ease, border-color 0.12s ease;
+  }
+  .todo-item:hover { background: #F5F7FB; border-color: var(--border); }
+  .todo-item:active { background: #EEF1F7; }
+  .todo-item + .todo-item { margin-top: 0; }
+  .todo-item .todo-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .todo-item .todo-desc { font-weight: 600; }
+  .todo-item .todo-date { white-space: nowrap; color: var(--muted); flex-shrink: 0; }
+  .todo-item .todo-date.overdue { color: var(--danger); font-weight: 700; }
+  .todo-item .todo-meta { display: flex; align-items: center; gap: 6px; margin-top: 4px; color: var(--muted); }
+  .todo-type-pill {
+    display: inline-block; padding: 2px 9px; border-radius: 100px; font-size: 10px;
+    font-weight: 700; color: white; white-space: nowrap; text-transform: uppercase; letter-spacing: 0.02em;
+  }
+  .todo-meta .todo-who { color: var(--muted); }
 
   .card { background: var(--card); border-radius: 10px; padding: 14px 16px; }
   .card h3 { margin: 0 0 8px; font-size: 15px; font-weight: 700; }
@@ -100,6 +131,12 @@
   }
   .list-row .l { color: var(--muted); }
   .list-row .r { font-weight: 600; }
+  .list-row.clickable {
+    cursor: pointer; border-radius: 6px; padding: 4px 6px; margin: 0 -6px;
+    border: 1px solid transparent; transition: background 0.12s ease, border-color 0.12s ease;
+  }
+  .list-row.clickable:hover { background: #F5F7FB; border-color: var(--border); }
+  .list-row.clickable:active { background: #EEF1F7; }
   .muted-note { color: var(--muted); font-size: 13px; padding: 8px 0; }
 
   table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -302,6 +339,11 @@ function defaultProbability(pipeline, stage) {
 function stageColor(pipeline, stage) { return pipelineOf(pipeline).colors[stage] || "var(--gray)"; }
 
 const ACTIVITY_TYPES = ["Call", "Email", "Meeting", "Demo"];
+const TODO_TYPE_COLORS = {
+  "Call": "var(--primary)", "Email": "var(--accent)", "Meeting": "var(--purple)",
+  "Demo": "var(--amber)", "Follow Up": "var(--green)",
+};
+function todoTypeColor(typeLabel) { return TODO_TYPE_COLORS[typeLabel] || "var(--gray)"; }
 const PILOT_STATUS = ["Planning", "Active", "Completed", "Paused"];
 const PILOT_STATUS_COLORS = { "Planning": "var(--gray)", "Active": "var(--accent)", "Completed": "var(--green)", "Paused": "var(--amber)" };
 const PARTNERSHIP_TYPES = ["Curriculum", "Clinical", "Technology", "Distribution", "Other"];
@@ -332,6 +374,13 @@ function uid(prefix) {
 }
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
+}
+// Whole-day difference between two "YYYY-MM-DD" strings, computed in UTC so
+// local timezone offsets don't shift the count by a day.
+function daysBetween(fromDateStr, toDateStr) {
+  const from = new Date(fromDateStr + "T00:00:00Z");
+  const to = new Date(toDateStr + "T00:00:00Z");
+  return Math.round((to.getTime() - from.getTime()) / 86400000);
 }
 function monthKey(dateStr) {
   if (!dateStr || dateStr.length < 7) return null;
@@ -961,6 +1010,17 @@ function showScreen(name) {
 
 function refreshCurrentScreen() { showScreen(currentScreen); }
 
+// Jump to the Organizations screen filtered/selected down to one specific
+// organization — used by clickable org references elsewhere (e.g. the
+// Dashboard's Recently Added Organizations list).
+function goToOrganization(orgId) {
+  const org = Store.getOrganization(orgId);
+  orgScreenState.selectedOrgId = orgId;
+  orgScreenState.typeFilter = "All Types";
+  orgScreenState.search = org ? org.name : "";
+  showScreen("Organizations");
+}
+
 // Shared: build <option> tags for an organization dropdown
 function orgOptionsHtml(selectedId, includeNone) {
   const orgs = Store.listOrganizations();
@@ -993,9 +1053,12 @@ function renderDashboard() {
     : `<div class="muted-note">No organizations yet.</div>`;
 
   const recentRows = m.recentOrgs.length
-    ? m.recentOrgs.map(o =>
-        `<div class="list-row"><span>${escapeHtml(o.name || "(unnamed)")}</span><span class="l">${escapeHtml(o.createdDate)}</span></div>`
-      ).join("")
+    ? m.recentOrgs.map(o => `
+        <div class="list-row clickable" tabindex="0" title="View ${escapeHtml(o.name || "this organization")}"
+             onclick="goToOrganization('${o.id}')" onkeydown="if(event.key==='Enter')goToOrganization('${o.id}')">
+          <span>${escapeHtml(o.name || "(unnamed)")}</span><span class="l">${escapeHtml(o.createdDate)}</span>
+        </div>
+      `).join("")
     : `<div class="muted-note">No organizations yet.</div>`;
 
   const pipelineRows = PIPELINE_NAMES.map(p =>
@@ -1004,35 +1067,82 @@ function renderDashboard() {
 
   const winRateDisplay = m.winRate === null ? "—" : Math.round(m.winRate) + "%";
 
+  const todoRows = buildTodoListHtml();
+
   return `
     <div class="header">
       <h1>Dashboard</h1>
       <p>Overview of your pipeline, organizations, and contacts.</p>
     </div>
     <div class="cards">
-      <div class="metric-card"><div class="value" style="color:var(--accent)">${m.totalOrgs}</div><div class="label">Total Organizations</div></div>
-      <div class="metric-card"><div class="value" style="color:var(--green)">${m.totalContacts}</div><div class="label">Total Contacts</div></div>
-      <div class="metric-card"><div class="value" style="color:var(--amber)">${m.decisionMakers}</div><div class="label">Decision Makers</div></div>
-    </div>
-    <div class="cards">
       <div class="metric-card"><div class="value" style="color:var(--primary)">${money(m.totalPipeline)}</div><div class="label">Total Pipeline (Sales)</div></div>
       <div class="metric-card"><div class="value" style="color:var(--purple)">${money(m.expectedRevenue)}</div><div class="label">Expected Revenue (Sales)</div></div>
       <div class="metric-card"><div class="value" style="color:var(--green)">${winRateDisplay}</div><div class="label">Win Rate (Sales)</div></div>
     </div>
-    <div class="body-grid">
-      <div class="card"><h3>Organizations by Type</h3>${byTypeRows}</div>
-      <div class="card"><h3>Opportunities by Pipeline</h3>${pipelineRows}</div>
-    </div>
-    <div class="body-grid">
-      <div class="card">
-        <h3>Due Today &amp; Overdue</h3>
-        <div class="list-row"><span class="l">Activities due today</span><span class="r">${m.activitiesDueToday}</span></div>
-        <div class="list-row"><span class="l">Follow-ups due today</span><span class="r">${m.followUpsDueToday}</span></div>
-        <div class="list-row"><span class="l">Follow-ups overdue</span><span class="r" style="color:var(--danger)">${m.followUpsOverdue}</span></div>
+    <div class="body-grid dash-main">
+      <div class="dash-left">
+        <div class="card"><h3>Recently Added Organizations</h3>${recentRows}</div>
+        <div class="card"><h3>Organizations by Type</h3>${byTypeRows}</div>
+        <div class="card"><h3>Opportunities by Pipeline</h3>${pipelineRows}</div>
       </div>
-      <div class="card"><h3>Recently Added Organizations</h3>${recentRows}</div>
+      <div class="dash-right">
+        <div class="card"><h3>To Do</h3>${todoRows}</div>
+      </div>
+    </div>
+    <div class="mini-stats-strip">
+      <span class="stat"><strong>${m.totalOrgs}</strong> organizations</span>
+      <span class="stat"><strong>${m.totalContacts}</strong> contacts</span>
+      <span class="stat"><strong>${m.decisionMakers}</strong> decision makers</span>
     </div>
   `;
+}
+
+// Combines overdue + upcoming Activities and open Follow Ups into one
+// dashboard "To Do" feed, sorted ascending by due date (most overdue /
+// soonest due first).
+function buildTodoListHtml() {
+  const today = todayStr();
+
+  const activityItems = Store.listActivities().map(a => ({
+    dueDate: a.date, label: a.subject || a.type, typeLabel: a.type,
+    orgId: a.orgId, contactId: a.contactId, screen: "Activities",
+  }));
+  const followUpItems = Store.listFollowUps()
+    .filter(f => f.status !== "Done")
+    .map(f => ({
+      dueDate: f.dueDate, label: f.description || "Follow up", typeLabel: "Follow Up",
+      orgId: f.orgId, contactId: f.contactId, screen: "Follow Ups",
+    }));
+
+  const items = activityItems.concat(followUpItems)
+    .filter(item => !!item.dueDate)
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+    .slice(0, 10);
+
+  if (!items.length) return `<div class="muted-note">Nothing overdue or upcoming.</div>`;
+
+  return `<div class="todo-list">${items.map(item => {
+    const org = item.orgId ? Store.getOrganization(item.orgId) : null;
+    const contact = item.contactId ? Store.getContact(item.contactId) : null;
+    const who = [org ? org.name : "", contact ? contact.firstName + " " + contact.lastName : ""].filter(Boolean).join(" · ");
+    const overdue = item.dueDate < today;
+    const daysOverdue = overdue ? daysBetween(item.dueDate, today) : 0;
+    const dateLabel = overdue
+      ? (daysOverdue === 1 ? "1 day overdue" : daysOverdue + " days overdue")
+      : item.dueDate;
+    return `
+      <div class="todo-item" tabindex="0" title="Go to ${escapeHtml(item.screen)}" onclick="showScreen('${item.screen}')" onkeydown="if(event.key==='Enter')showScreen('${item.screen}')">
+        <div class="todo-top">
+          <span class="todo-desc">${escapeHtml(item.label)}</span>
+          <span class="todo-date ${overdue ? "overdue" : ""}" title="${escapeHtml(item.dueDate)}">${escapeHtml(dateLabel)}</span>
+        </div>
+        <div class="todo-meta">
+          <span class="todo-type-pill" style="background:${todoTypeColor(item.typeLabel)}">${escapeHtml(item.typeLabel)}</span>
+          ${who ? `<span class="todo-who">${escapeHtml(who)}</span>` : ""}
+        </div>
+      </div>
+    `;
+  }).join("")}</div>`;
 }
 
 // ---------------------------------------------------------------- //

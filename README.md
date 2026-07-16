@@ -17,8 +17,10 @@ Every section from the original plan is now built:
 
 - **Dashboard** — total organizations, contacts, decision makers, total
   pipeline, expected (weighted) revenue, and win rate (Sales pipeline),
-  organizations by type, opportunities by pipeline, activities/follow-ups
-  due today and overdue, recently added organizations.
+  organizations by type, opportunities by pipeline, a **To Do** list
+  combining overdue/upcoming activities and open follow-ups (sorted oldest/
+  most-overdue first, overdue items in red), activities/follow-ups due today
+  and overdue counts, recently added organizations.
 - **Organizations** — searchable/filterable table, add/edit/delete, notes,
   detail panel showing linked contacts and opportunities.
 - **Contacts** — searchable table, add/edit/delete, linked to an
