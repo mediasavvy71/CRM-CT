@@ -150,6 +150,9 @@
   .forecast-chip { background: var(--card); border-radius: 8px; padding: 10px 16px; font-size: 12px; }
   .forecast-chip .v { font-size: 18px; font-weight: 700; display: block; }
 
+  .pipeline-tabs { display: flex; gap: 6px; padding: 0 28px 10px; flex-wrap: wrap; }
+  .card-caption { font-size: 11px; color: var(--muted); margin: -4px 0 8px; }
+
   /* Progress bar */
   .progress-track { background: var(--bg); border-radius: 100px; height: 8px; overflow: hidden; margin: 4px 0; }
   .progress-fill { background: var(--accent); height: 100%; border-radius: 100px; }
@@ -254,15 +257,50 @@
 
 const STORAGE_KEY = "chronicTraceCRM_v2";
 const ORG_TYPES = ["High School", "College", "Healthcare", "Enterprise", "Partnership", "Other"];
-const OPP_STAGES = ["Prospecting", "Qualification", "Proposal Sent", "Negotiation", "Closed Won", "Closed Lost"];
-const STAGE_DEFAULT_PROBABILITY = {
-  "Prospecting": 10, "Qualification": 25, "Proposal Sent": 50,
-  "Negotiation": 75, "Closed Won": 100, "Closed Lost": 0,
+
+// HubSpot-style pipelines: each has its own ordered stages, default
+// probabilities, colors, and which stage counts as "won" vs "lost".
+// Opportunities carry a `pipeline` field and always belong to exactly one.
+const PIPELINES = {
+  "Sales": {
+    stages: ["Prospecting", "Qualification", "Proposal Sent", "Negotiation", "Closed Won", "Closed Lost"],
+    probabilities: { "Prospecting": 10, "Qualification": 25, "Proposal Sent": 50, "Negotiation": 75, "Closed Won": 100, "Closed Lost": 0 },
+    colors: { "Prospecting": "var(--gray)", "Qualification": "var(--accent)", "Proposal Sent": "var(--amber)", "Negotiation": "var(--purple)", "Closed Won": "var(--green)", "Closed Lost": "var(--danger)" },
+    won: "Closed Won", lost: "Closed Lost",
+  },
+  "Research": {
+    stages: ["Idea", "Literature Review", "Study Design", "IRB Approval", "Data Collection", "Published", "Discontinued"],
+    probabilities: { "Idea": 10, "Literature Review": 25, "Study Design": 40, "IRB Approval": 60, "Data Collection": 80, "Published": 100, "Discontinued": 0 },
+    colors: { "Idea": "var(--gray)", "Literature Review": "var(--accent)", "Study Design": "var(--amber)", "IRB Approval": "var(--purple)", "Data Collection": "#0EA5E9", "Published": "var(--green)", "Discontinued": "var(--danger)" },
+    won: "Published", lost: "Discontinued",
+  },
+  "Partnership": {
+    stages: ["Prospecting", "Discussions", "Agreement Drafting", "Active", "Ended"],
+    probabilities: { "Prospecting": 10, "Discussions": 30, "Agreement Drafting": 60, "Active": 100, "Ended": 0 },
+    colors: { "Prospecting": "var(--gray)", "Discussions": "var(--accent)", "Agreement Drafting": "var(--amber)", "Active": "var(--green)", "Ended": "var(--danger)" },
+    won: "Active", lost: "Ended",
+  },
+  "Funding": {
+    stages: ["Researching", "Preparing Application", "Applied", "Awarded", "Declined"],
+    probabilities: { "Researching": 10, "Preparing Application": 30, "Applied": 60, "Awarded": 100, "Declined": 0 },
+    colors: { "Researching": "var(--gray)", "Preparing Application": "var(--accent)", "Applied": "var(--amber)", "Awarded": "var(--green)", "Declined": "var(--danger)" },
+    won: "Awarded", lost: "Declined",
+  },
+  "Feedback": {
+    stages: ["Collected", "Under Review", "Actioned", "Published", "Archived"],
+    probabilities: { "Collected": 20, "Under Review": 40, "Actioned": 70, "Published": 100, "Archived": 0 },
+    colors: { "Collected": "var(--gray)", "Under Review": "var(--accent)", "Actioned": "var(--amber)", "Published": "var(--green)", "Archived": "var(--danger)" },
+    won: "Published", lost: "Archived",
+  },
 };
-const STAGE_COLORS = {
-  "Prospecting": "var(--gray)", "Qualification": "var(--accent)", "Proposal Sent": "var(--amber)",
-  "Negotiation": "var(--purple)", "Closed Won": "var(--green)", "Closed Lost": "var(--danger)",
-};
+const PIPELINE_NAMES = Object.keys(PIPELINES);
+function pipelineOf(name) { return PIPELINES[name] || PIPELINES["Sales"]; }
+function defaultProbability(pipeline, stage) {
+  const v = pipelineOf(pipeline).probabilities[stage];
+  return v === undefined ? 0 : v;
+}
+function stageColor(pipeline, stage) { return pipelineOf(pipeline).colors[stage] || "var(--gray)"; }
+
 const ACTIVITY_TYPES = ["Call", "Email", "Meeting", "Demo"];
 const PILOT_STATUS = ["Planning", "Active", "Completed", "Paused"];
 const PILOT_STATUS_COLORS = { "Planning": "var(--gray)", "Active": "var(--accent)", "Completed": "var(--green)", "Paused": "var(--amber)" };
@@ -275,7 +313,7 @@ const NAV_ITEMS = [
   { name: "Dashboard", enabled: true },
   { name: "Organizations", enabled: true },
   { name: "Contacts", enabled: true },
-  { name: "Sales Opportunities", enabled: true },
+  { name: "Pipelines", enabled: true },
   { name: "Activities", enabled: true },
   { name: "Follow Ups", enabled: true },
   { name: "Pilot Programs", enabled: true },
@@ -352,6 +390,10 @@ const Store = {
   _ensureShape() {
     const empty = this._emptyState();
     Object.keys(empty).forEach(k => { if (!Array.isArray(this.state[k])) this.state[k] = []; });
+    // Migrate data saved before pipelines existed: default to "Sales".
+    this.state.opportunities.forEach(o => {
+      if (!o.pipeline || !PIPELINES[o.pipeline]) o.pipeline = "Sales";
+    });
   },
 
   save() {
@@ -387,16 +429,28 @@ const Store = {
     const plusDays = (n) => { const d = new Date(today); d.setDate(d.getDate() + n); return iso(d); };
     const minusDays = (n) => plusDays(-n);
 
-    const opp1 = this.addOpportunity({ orgId: o1, name: "District-wide health curriculum pilot", stage: "Proposal Sent",
+    const opp1 = this.addOpportunity({ pipeline: "Sales", orgId: o1, name: "District-wide health curriculum pilot", stage: "Proposal Sent",
       amount: 18000, probability: 50, expectedCloseDate: plusDays(30), source: "Referral",
       notes: "Waiting on school board approval." });
-    this.addOpportunity({ orgId: o2, name: "Patient education content license", stage: "Negotiation",
+    this.addOpportunity({ pipeline: "Sales", orgId: o2, name: "Patient education content license", stage: "Negotiation",
       amount: 42000, probability: 75, expectedCloseDate: plusDays(15), source: "Conference",
       notes: "Legal reviewing contract terms." });
-    this.addOpportunity({ orgId: o3, name: "Nursing curriculum licensing", stage: "Qualification",
+    this.addOpportunity({ pipeline: "Sales", orgId: o3, name: "Nursing curriculum licensing", stage: "Qualification",
       amount: 9500, probability: 25, expectedCloseDate: plusDays(60), source: "Website" });
-    this.addOpportunity({ orgId: o1, name: "Summer health literacy program", stage: "Closed Won",
+    this.addOpportunity({ pipeline: "Sales", orgId: o1, name: "Summer health literacy program", stage: "Closed Won",
       amount: 6000, probability: 100, expectedCloseDate: minusDays(20), source: "Referral" });
+
+    this.addOpportunity({ pipeline: "Research", orgId: o3, name: "Curriculum efficacy study with Westbrook Nursing",
+      stage: "Study Design", source: "Internal",
+      notes: "Assessing learning outcomes from the licensed curriculum." });
+    this.addOpportunity({ pipeline: "Partnership", orgId: o2, name: "Metro Health regional expansion",
+      stage: "Discussions", source: "Referral",
+      notes: "Exploring a broader partnership beyond the initial content license." });
+    this.addOpportunity({ pipeline: "Funding", orgId: o1, name: "NIH Community Health Innovation Grant",
+      stage: "Applied", amount: 50000, expectedCloseDate: plusDays(60), source: "Website" });
+    this.addOpportunity({ pipeline: "Feedback", orgId: o1, name: "Lincoln HS pilot feedback, round 1",
+      stage: "Under Review", source: "Pilot Program",
+      notes: "Teacher and student survey responses from the first pilot semester." });
 
     this.addActivity({ orgId: o1, contactId: c1, oppId: opp1, type: "Meeting", date: minusDays(3),
       subject: "Kickoff call with Principal Doe", notes: "Walked through pilot scope and timeline." });
@@ -525,11 +579,13 @@ const Store = {
 
   addOpportunity(data) {
     const org = data.orgId ? this.getOrganization(data.orgId) : null;
+    const pipeline = data.pipeline && PIPELINES[data.pipeline] ? data.pipeline : "Sales";
+    const stage = data.stage || pipelineOf(pipeline).stages[0];
     const opp = {
       id: uid("OPP"), orgId: data.orgId || "", orgName: org ? org.name : "",
-      name: data.name || "", stage: data.stage || OPP_STAGES[0],
+      name: data.name || "", pipeline, stage,
       amount: parseFloat(data.amount) || 0,
-      probability: data.probability !== undefined && data.probability !== "" ? parseFloat(data.probability) : (STAGE_DEFAULT_PROBABILITY[data.stage] || 0),
+      probability: data.probability !== undefined && data.probability !== "" ? parseFloat(data.probability) : defaultProbability(pipeline, stage),
       expectedCloseDate: data.expectedCloseDate || "", source: data.source || "",
       notes: data.notes || "", createdDate: todayStr(),
     };
@@ -553,7 +609,9 @@ const Store = {
   },
 
   setOpportunityStage(id, stage) {
-    this.updateOpportunity(id, { stage, probability: STAGE_DEFAULT_PROBABILITY[stage] });
+    const o = this.getOpportunity(id);
+    if (!o) return;
+    this.updateOpportunity(id, { stage, probability: defaultProbability(o.pipeline, stage) });
   },
 
   deleteOpportunity(id) {
@@ -743,17 +801,24 @@ const Store = {
       .sort((a, b) => (b.createdDate || "").localeCompare(a.createdDate || ""))
       .slice(0, 5);
 
-    const openOpps = opps.filter(o => o.stage !== "Closed Won" && o.stage !== "Closed Lost");
-    const totalPipeline = openOpps.reduce((s, o) => s + (parseFloat(o.amount) || 0), 0);
-    const expectedRevenue = openOpps.reduce((s, o) => s + (parseFloat(o.amount) || 0) * (parseFloat(o.probability) || 0) / 100, 0);
-    const oppsByStage = {};
-    OPP_STAGES.forEach(s => { oppsByStage[s] = 0; });
-    opps.forEach(o => { oppsByStage[o.stage] = (oppsByStage[o.stage] || 0) + 1; });
-    const closedWonCount = opps.filter(o => o.stage === "Closed Won").length;
-    const closedLostCount = opps.filter(o => o.stage === "Closed Lost").length;
+    // Total Pipeline / Expected Revenue / Win Rate are scoped to the Sales
+    // pipeline specifically -- it's the only pipeline where "amount" reliably
+    // means dollars of revenue. Other pipelines (Research, Partnership,
+    // Funding, Feedback) track process, not sales revenue.
+    const salesOpps = opps.filter(o => o.pipeline === "Sales");
+    const salesPipeline = PIPELINES.Sales;
+    const openSalesOpps = salesOpps.filter(o => o.stage !== salesPipeline.won && o.stage !== salesPipeline.lost);
+    const totalPipeline = openSalesOpps.reduce((s, o) => s + (parseFloat(o.amount) || 0), 0);
+    const expectedRevenue = openSalesOpps.reduce((s, o) => s + (parseFloat(o.amount) || 0) * (parseFloat(o.probability) || 0) / 100, 0);
+    const closedWonCount = salesOpps.filter(o => o.stage === salesPipeline.won).length;
+    const closedLostCount = salesOpps.filter(o => o.stage === salesPipeline.lost).length;
     const winRate = (closedWonCount + closedLostCount) > 0
       ? (closedWonCount / (closedWonCount + closedLostCount)) * 100
       : null;
+
+    const oppsByPipeline = {};
+    PIPELINE_NAMES.forEach(p => { oppsByPipeline[p] = 0; });
+    opps.forEach(o => { oppsByPipeline[o.pipeline] = (oppsByPipeline[o.pipeline] || 0) + 1; });
 
     const activitiesDueToday = this.listActivities().filter(a => a.date === today).length;
     const openFollowUps = this.listFollowUps().filter(f => f.status !== "Done");
@@ -763,7 +828,7 @@ const Store = {
     return {
       totalOrgs: orgs.length, totalContacts: contacts.length, decisionMakers,
       byType, recentOrgs,
-      totalPipeline, expectedRevenue, oppsByStage, winRate,
+      totalPipeline, expectedRevenue, oppsByPipeline, winRate,
       activitiesDueToday, followUpsDueToday, followUpsOverdue,
     };
   },
@@ -780,11 +845,12 @@ const Store = {
 let currentScreen = "Dashboard";
 let orgScreenState = { search: "", typeFilter: "All Types", selectedOrgId: null };
 let contactScreenState = { search: "" };
-let oppScreenState = { view: "kanban", search: "", stageFilter: "All Stages" };
+let oppScreenState = { view: "kanban", search: "", pipeline: "Sales", stageFilter: "All Stages" };
 let activityScreenState = { search: "", typeFilter: "All Types" };
 let pilotScreenState = {};
 let partnershipScreenState = { search: "" };
 let grantScreenState = { search: "" };
+let reportsScreenState = { pipeline: "Sales" };
 let modalMilestones = [];
 
 function renderSidebar() {
@@ -812,13 +878,13 @@ function showScreen(name) {
   if (name === "Dashboard") content.innerHTML = renderDashboard();
   else if (name === "Organizations") { content.innerHTML = renderOrganizations(); afterRenderOrganizations(); }
   else if (name === "Contacts") { content.innerHTML = renderContacts(); afterRenderContacts(); }
-  else if (name === "Sales Opportunities") { content.innerHTML = renderOpportunities(); afterRenderOpportunities(); }
+  else if (name === "Pipelines") { content.innerHTML = renderOpportunities(); afterRenderOpportunities(); }
   else if (name === "Activities") { content.innerHTML = renderActivities(); afterRenderActivities(); }
   else if (name === "Follow Ups") { content.innerHTML = renderFollowUps(); afterRenderFollowUps(); }
   else if (name === "Pilot Programs") { content.innerHTML = renderPilotPrograms(); afterRenderPilotPrograms(); }
   else if (name === "Partnerships") { content.innerHTML = renderPartnerships(); afterRenderPartnerships(); }
   else if (name === "Grant Tracker") { content.innerHTML = renderGrantTracker(); afterRenderGrantTracker(); }
-  else if (name === "Reports") { content.innerHTML = renderReports(); }
+  else if (name === "Reports") { content.innerHTML = renderReports(); afterRenderReports(); }
   else if (name === "Settings") { content.innerHTML = renderSettings(); afterRenderSettings(); }
   else content.innerHTML = renderComingSoon(name);
 }
@@ -841,7 +907,7 @@ function contactOptionsHtml(orgId, selectedId) {
 function oppOptionsHtml(orgId, selectedId) {
   const opps = orgId ? Store.opportunitiesForOrg(orgId) : Store.listOpportunities();
   let html = `<option value="">(None)</option>`;
-  html += opps.map(o => `<option value="${o.id}" ${o.id === selectedId ? "selected" : ""}>${escapeHtml(o.name)}</option>`).join("");
+  html += opps.map(o => `<option value="${o.id}" ${o.id === selectedId ? "selected" : ""}>${escapeHtml(o.name)} (${escapeHtml(o.pipeline)})</option>`).join("");
   return html;
 }
 
@@ -862,8 +928,8 @@ function renderDashboard() {
       ).join("")
     : `<div class="muted-note">No organizations yet.</div>`;
 
-  const stageRows = OPP_STAGES.map(stage =>
-    `<div class="list-row"><span class="l">${escapeHtml(stage)}</span><span class="r">${m.oppsByStage[stage] || 0}</span></div>`
+  const pipelineRows = PIPELINE_NAMES.map(p =>
+    `<div class="list-row"><span class="l">${escapeHtml(p)}</span><span class="r">${m.oppsByPipeline[p] || 0}</span></div>`
   ).join("");
 
   const winRateDisplay = m.winRate === null ? "—" : Math.round(m.winRate) + "%";
@@ -879,13 +945,13 @@ function renderDashboard() {
       <div class="metric-card"><div class="value" style="color:var(--amber)">${m.decisionMakers}</div><div class="label">Decision Makers</div></div>
     </div>
     <div class="cards">
-      <div class="metric-card"><div class="value" style="color:var(--primary)">${money(m.totalPipeline)}</div><div class="label">Total Pipeline</div></div>
-      <div class="metric-card"><div class="value" style="color:var(--purple)">${money(m.expectedRevenue)}</div><div class="label">Expected Revenue</div></div>
-      <div class="metric-card"><div class="value" style="color:var(--green)">${winRateDisplay}</div><div class="label">Win Rate</div></div>
+      <div class="metric-card"><div class="value" style="color:var(--primary)">${money(m.totalPipeline)}</div><div class="label">Total Pipeline (Sales)</div></div>
+      <div class="metric-card"><div class="value" style="color:var(--purple)">${money(m.expectedRevenue)}</div><div class="label">Expected Revenue (Sales)</div></div>
+      <div class="metric-card"><div class="value" style="color:var(--green)">${winRateDisplay}</div><div class="label">Win Rate (Sales)</div></div>
     </div>
     <div class="body-grid">
       <div class="card"><h3>Organizations by Type</h3>${byTypeRows}</div>
-      <div class="card"><h3>Opportunities by Stage</h3>${stageRows}</div>
+      <div class="card"><h3>Opportunities by Pipeline</h3>${pipelineRows}</div>
     </div>
     <div class="body-grid">
       <div class="card">
@@ -992,7 +1058,7 @@ function renderOrgDetail() {
     : `<div class="muted-note">No linked contacts.</div>`;
   const opps = Store.opportunitiesForOrg(org.id);
   const oppRows = opps.length
-    ? opps.map(o => `<div class="contact-mini-row"><span>${escapeHtml(o.name)}</span><span class="l">${escapeHtml(o.stage)}</span></div>`).join("")
+    ? opps.map(o => `<div class="contact-mini-row"><span>${escapeHtml(o.name)}</span><span class="l">${escapeHtml(o.pipeline)}: ${escapeHtml(o.stage)}</span></div>`).join("")
     : `<div class="muted-note">No linked opportunities.</div>`;
   const address = [org.address, org.city, org.state ? org.state + (org.zip ? " " + org.zip : "") : org.zip]
     .filter(Boolean).join(", ");
@@ -1210,17 +1276,27 @@ function openContactModal(contactId) {
 }
 
 // ---------------------------------------------------------------- //
-// Sales Opportunities
+// Pipelines (Sales, Research, Partnership, Funding, Feedback)
 // ---------------------------------------------------------------- //
+function renderPipelineTabsHtml() {
+  return `
+    <div class="pipeline-tabs" id="pipeline-tabs">
+      ${PIPELINE_NAMES.map(p => `<button class="btn ${p === oppScreenState.pipeline ? '' : 'toggle-off'}" data-pipeline="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join("")}
+    </div>
+  `;
+}
+
 function renderOpportunities() {
-  const stageOptions = ["All Stages", ...OPP_STAGES]
+  const stages = pipelineOf(oppScreenState.pipeline).stages;
+  const stageOptions = ["All Stages", ...stages]
     .map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("");
 
   return `
     <div class="header">
-      <h1>Sales Opportunities</h1>
-      <p>Your pipeline across every prospect.</p>
+      <h1>Pipelines</h1>
+      <p>Track deals across every pipeline — Sales, Research, Partnership, Funding, and Feedback.</p>
     </div>
+    ${renderPipelineTabsHtml()}
     <div class="forecast-bar" id="opp-forecast"></div>
     <div class="toolbar">
       <input type="search" id="opp-search" placeholder="Search opportunities..." style="width:240px" value="${escapeHtml(oppScreenState.search)}">
@@ -1236,6 +1312,13 @@ function renderOpportunities() {
 
 function afterRenderOpportunities() {
   byId("opp-stage-filter").value = oppScreenState.stageFilter;
+  [...byId("pipeline-tabs").querySelectorAll("button")].forEach(btn => {
+    btn.addEventListener("click", () => {
+      oppScreenState.pipeline = btn.getAttribute("data-pipeline");
+      oppScreenState.stageFilter = "All Stages";
+      refreshCurrentScreen();
+    });
+  });
   byId("opp-search").addEventListener("input", e => { oppScreenState.search = e.target.value; renderOppBody(); });
   byId("opp-stage-filter").addEventListener("change", e => { oppScreenState.stageFilter = e.target.value; renderOppBody(); });
   byId("opp-view-kanban").addEventListener("click", () => { oppScreenState.view = "kanban"; refreshCurrentScreen(); });
@@ -1246,7 +1329,7 @@ function afterRenderOpportunities() {
 }
 
 function filteredOpportunities() {
-  let opps = Store.listOpportunities();
+  let opps = Store.listOpportunities().filter(o => o.pipeline === oppScreenState.pipeline);
   if (oppScreenState.stageFilter && oppScreenState.stageFilter !== "All Stages") {
     opps = opps.filter(o => o.stage === oppScreenState.stageFilter);
   }
@@ -1258,16 +1341,17 @@ function filteredOpportunities() {
 function renderOppForecast() {
   const el = byId("opp-forecast");
   if (!el) return;
-  const opps = Store.listOpportunities();
-  const open = opps.filter(o => o.stage !== "Closed Won" && o.stage !== "Closed Lost");
+  const pipeline = pipelineOf(oppScreenState.pipeline);
+  const opps = Store.listOpportunities().filter(o => o.pipeline === oppScreenState.pipeline);
+  const open = opps.filter(o => o.stage !== pipeline.won && o.stage !== pipeline.lost);
   const totalPipeline = open.reduce((s, o) => s + (parseFloat(o.amount) || 0), 0);
   const weighted = open.reduce((s, o) => s + (parseFloat(o.amount) || 0) * (parseFloat(o.probability) || 0) / 100, 0);
-  const won = opps.filter(o => o.stage === "Closed Won").reduce((s, o) => s + (parseFloat(o.amount) || 0), 0);
+  const won = opps.filter(o => o.stage === pipeline.won).reduce((s, o) => s + (parseFloat(o.amount) || 0), 0);
   el.innerHTML = `
-    <div class="forecast-chip"><span class="v">${money(totalPipeline)}</span>Total Pipeline</div>
+    <div class="forecast-chip"><span class="v">${money(totalPipeline)}</span>Total Value</div>
     <div class="forecast-chip"><span class="v">${money(weighted)}</span>Weighted Forecast</div>
-    <div class="forecast-chip"><span class="v">${money(won)}</span>Closed Won</div>
-    <div class="forecast-chip"><span class="v">${open.length}</span>Open Opportunities</div>
+    <div class="forecast-chip"><span class="v">${money(won)}</span>Won</div>
+    <div class="forecast-chip"><span class="v">${open.length}</span>Open</div>
   `;
 }
 
@@ -1281,7 +1365,8 @@ function renderOppBody() {
 
 function renderOppKanbanHtml() {
   const opps = filteredOpportunities();
-  const cols = OPP_STAGES.map(stage => {
+  const stages = pipelineOf(oppScreenState.pipeline).stages;
+  const cols = stages.map(stage => {
     const stageOpps = opps.filter(o => o.stage === stage);
     const cards = stageOpps.map(o => `
       <div class="kanban-card" data-id="${o.id}">
@@ -1289,7 +1374,7 @@ function renderOppKanbanHtml() {
         <div class="org">${escapeHtml(o.orgName || "(no org)")}</div>
         <span class="amount">${money(o.amount)}</span><span class="prob">${o.probability || 0}%</span>
         <select class="opp-stage-select" data-id="${o.id}">
-          ${OPP_STAGES.map(s => `<option value="${escapeHtml(s)}" ${s === o.stage ? "selected" : ""}>${escapeHtml(s)}</option>`).join("")}
+          ${stages.map(s => `<option value="${escapeHtml(s)}" ${s === o.stage ? "selected" : ""}>${escapeHtml(s)}</option>`).join("")}
         </select>
         <div class="kanban-card-actions">
           <button class="btn tiny outline opp-edit-btn" data-id="${o.id}">Edit</button>
@@ -1339,7 +1424,7 @@ function renderOppTableHtml() {
   const rows = opps.map(o => `
     <tr data-id="${o.id}">
       <td>${escapeHtml(o.name)}</td><td>${escapeHtml(o.orgName)}</td>
-      <td><span class="badge" style="background:${STAGE_COLORS[o.stage] || 'var(--gray)'}">${escapeHtml(o.stage)}</span></td>
+      <td><span class="badge" style="background:${stageColor(o.pipeline, o.stage)}">${escapeHtml(o.stage)}</span></td>
       <td>${money(o.amount)}</td><td>${o.probability || 0}%</td><td>${escapeHtml(o.expectedCloseDate)}</td>
       <td>${escapeHtml(o.source)}</td>
       <td>
@@ -1384,7 +1469,11 @@ function wireOppTable() {
 
 function openOppModal(oppId) {
   const opp = oppId ? Store.getOpportunity(oppId) : null;
-  const stageOptions = OPP_STAGES.map(s =>
+  const pipeline = opp ? opp.pipeline : oppScreenState.pipeline;
+  const pipelineOptions = PIPELINE_NAMES.map(p =>
+    `<option value="${escapeHtml(p)}" ${p === pipeline ? "selected" : ""}>${escapeHtml(p)}</option>`
+  ).join("");
+  const stageOptions = pipelineOf(pipeline).stages.map(s =>
     `<option value="${escapeHtml(s)}" ${opp && opp.stage === s ? "selected" : ""}>${escapeHtml(s)}</option>`
   ).join("");
 
@@ -1393,13 +1482,14 @@ function openOppModal(oppId) {
     <div class="field-group"><label>Organization</label><select id="f-org">${orgOptionsHtml(opp ? opp.orgId : "", true)}</select></div>
     <div class="field-group"><label>Name</label><input type="text" id="f-name" value="${escapeHtml(opp ? opp.name : "")}"></div>
     <div class="field-row">
+      <div class="field-group"><label>Pipeline</label><select id="f-pipeline">${pipelineOptions}</select></div>
       <div class="field-group"><label>Stage</label><select id="f-stage">${stageOptions}</select></div>
-      <div class="field-group"><label>Probability (%)</label><input type="number" id="f-prob" min="0" max="100" value="${opp ? opp.probability : STAGE_DEFAULT_PROBABILITY[OPP_STAGES[0]]}"></div>
     </div>
     <div class="field-row">
+      <div class="field-group"><label>Probability (%)</label><input type="number" id="f-prob" min="0" max="100" value="${opp ? opp.probability : defaultProbability(pipeline, pipelineOf(pipeline).stages[0])}"></div>
       <div class="field-group"><label>Amount ($)</label><input type="number" id="f-amount" min="0" value="${opp ? opp.amount : ""}"></div>
-      <div class="field-group"><label>Expected Close Date</label><input type="date" id="f-close" value="${escapeHtml(opp ? opp.expectedCloseDate : "")}"></div>
     </div>
+    <div class="field-group"><label>Expected Close Date</label><input type="date" id="f-close" value="${escapeHtml(opp ? opp.expectedCloseDate : "")}"></div>
     <div class="field-group"><label>Source</label><input type="text" id="f-source" placeholder="Referral, Website, Conference..." value="${escapeHtml(opp ? opp.source : "")}"></div>
     <div class="field-group"><label>Notes</label><textarea id="f-notes" rows="3">${escapeHtml(opp ? opp.notes : "")}</textarea></div>
     <div class="modal-actions">
@@ -1409,14 +1499,21 @@ function openOppModal(oppId) {
   `;
   openModal();
 
+  byId("f-pipeline").addEventListener("change", () => {
+    const newPipeline = byId("f-pipeline").value;
+    const stages = pipelineOf(newPipeline).stages;
+    byId("f-stage").innerHTML = stages.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("");
+    byId("f-prob").value = defaultProbability(newPipeline, stages[0]);
+  });
   byId("f-stage").addEventListener("change", () => {
-    byId("f-prob").value = STAGE_DEFAULT_PROBABILITY[byId("f-stage").value];
+    byId("f-prob").value = defaultProbability(byId("f-pipeline").value, byId("f-stage").value);
   });
   byId("modal-cancel").addEventListener("click", closeModal);
   byId("modal-save").addEventListener("click", () => {
     const data = {
       orgId: byId("f-org").value,
       name: byId("f-name").value.trim(),
+      pipeline: byId("f-pipeline").value,
       stage: byId("f-stage").value,
       probability: byId("f-prob").value,
       amount: byId("f-amount").value,
@@ -1427,9 +1524,9 @@ function openOppModal(oppId) {
     if (!data.name) { alert("Opportunity name is required."); return; }
     if (opp) Store.updateOpportunity(opp.id, data);
     else Store.addOpportunity(data);
+    oppScreenState.pipeline = data.pipeline;
     closeModal();
-    renderOppForecast();
-    renderOppBody();
+    refreshCurrentScreen();
     showToast(opp ? "Opportunity updated." : "Opportunity added.");
   });
 }
@@ -2094,14 +2191,19 @@ function barChartHtml(entries, opts) {
 }
 
 function renderReports() {
-  const opps = Store.listOpportunities();
+  const allOpps = Store.listOpportunities();
+  const reportPipeline = pipelineOf(reportsScreenState.pipeline);
+  const pipelineOpps = allOpps.filter(o => o.pipeline === reportsScreenState.pipeline);
 
-  const pipelineEntries = OPP_STAGES.map(stage => ({
-    label: stage, value: opps.filter(o => o.stage === stage).reduce((s, o) => s + (parseFloat(o.amount) || 0), 0),
-    color: STAGE_COLORS[stage],
+  const pipelineEntries = reportPipeline.stages.map(stage => ({
+    label: stage, value: pipelineOpps.filter(o => o.stage === stage).reduce((s, o) => s + (parseFloat(o.amount) || 0), 0),
+    color: stageColor(reportsScreenState.pipeline, stage),
   }));
 
-  const closedWon = opps.filter(o => o.stage === "Closed Won");
+  // Revenue / Sales by Month / Lead Sources are scoped to the Sales pipeline,
+  // since that's the only pipeline where "amount" means dollars of revenue.
+  const salesOpps = allOpps.filter(o => o.pipeline === "Sales");
+  const closedWon = salesOpps.filter(o => o.stage === PIPELINES.Sales.won);
   const totalRevenue = closedWon.reduce((s, o) => s + (parseFloat(o.amount) || 0), 0);
   const revenueByMonth = {};
   closedWon.forEach(o => {
@@ -2111,18 +2213,22 @@ function renderReports() {
   const revenueEntries = Object.keys(revenueByMonth).sort().map(k => ({ label: monthLabel(k), value: revenueByMonth[k] }));
 
   const salesByMonth = {};
-  opps.forEach(o => {
+  salesOpps.forEach(o => {
     const key = monthKey(o.createdDate);
     if (key) salesByMonth[key] = (salesByMonth[key] || 0) + 1;
   });
   const salesEntries = Object.keys(salesByMonth).sort().map(k => ({ label: monthLabel(k), value: salesByMonth[k] }));
 
   const bySource = {};
-  opps.forEach(o => {
+  salesOpps.forEach(o => {
     const s = o.source || "Unspecified";
     bySource[s] = (bySource[s] || 0) + 1;
   });
   const sourceEntries = Object.entries(bySource).sort((a, b) => b[1] - a[1]).map(([label, value]) => ({ label, value }));
+
+  const pipelineSelectOptions = PIPELINE_NAMES.map(p =>
+    `<option value="${escapeHtml(p)}" ${p === reportsScreenState.pipeline ? "selected" : ""}>${escapeHtml(p)}</option>`
+  ).join("");
 
   return `
     <div class="header">
@@ -2132,22 +2238,33 @@ function renderReports() {
     <div class="report-section reports-grid">
       <div class="card">
         <h3>Pipeline by Stage</h3>
+        <select id="report-pipeline-select" style="margin-bottom:8px;">${pipelineSelectOptions}</select>
         ${barChartHtml(pipelineEntries, { money: true })}
       </div>
       <div class="card">
         <h3>Revenue (Closed Won: ${money(totalRevenue)})</h3>
+        <div class="card-caption">Sales pipeline only</div>
         ${barChartHtml(revenueEntries, { money: true })}
       </div>
       <div class="card">
         <h3>Sales by Month (opportunities created)</h3>
+        <div class="card-caption">Sales pipeline only</div>
         ${barChartHtml(salesEntries)}
       </div>
       <div class="card">
         <h3>Lead Sources</h3>
+        <div class="card-caption">Sales pipeline only</div>
         ${barChartHtml(sourceEntries)}
       </div>
     </div>
   `;
+}
+
+function afterRenderReports() {
+  byId("report-pipeline-select").addEventListener("change", e => {
+    reportsScreenState.pipeline = e.target.value;
+    refreshCurrentScreen();
+  });
 }
 
 // ---------------------------------------------------------------- //
@@ -2200,7 +2317,7 @@ function afterRenderSettings() {
 const SHEET_COLUMNS = {
   Organizations: ["OrgID","Name","Type","Industry","Address","City","State","Zip","Phone","Website","Notes","CreatedDate","LastContactDate"],
   Contacts: ["ContactID","OrgID","OrgName","FirstName","LastName","Title","Email","Phone","DecisionMaker","Notes","CreatedDate","LastContactDate"],
-  Opportunities: ["OppID","OrgID","OrgName","Name","Stage","Amount","Probability","ExpectedCloseDate","Source","Notes","CreatedDate"],
+  Opportunities: ["OppID","OrgID","OrgName","Pipeline","Name","Stage","Amount","Probability","ExpectedCloseDate","Source","Notes","CreatedDate"],
   Activities: ["ActivityID","OrgID","ContactID","OppID","Type","Date","Subject","Notes"],
   FollowUps: ["FollowUpID","OrgID","ContactID","DueDate","Description","Status","CreatedDate"],
   PilotPrograms: ["PilotID","OrgID","OrgName","Name","Status","StartDate","EndDate","ParticipantCount","TargetParticipants","Notes","MilestonesJSON","CreatedDate"],
@@ -2224,7 +2341,7 @@ function exportToExcel() {
     Notes: c.notes, CreatedDate: c.createdDate, LastContactDate: c.lastContactDate,
   }));
   const oppRows = Store.listOpportunities().map(o => ({
-    OppID: o.id, OrgID: o.orgId, OrgName: o.orgName, Name: o.name, Stage: o.stage, Amount: o.amount,
+    OppID: o.id, OrgID: o.orgId, OrgName: o.orgName, Pipeline: o.pipeline, Name: o.name, Stage: o.stage, Amount: o.amount,
     Probability: o.probability, ExpectedCloseDate: o.expectedCloseDate, Source: o.source, Notes: o.notes,
     CreatedDate: o.createdDate,
   }));
@@ -2304,12 +2421,15 @@ function importFromExcel(file) {
         decisionMaker: String(r.DecisionMaker || "").toLowerCase().startsWith("y"),
         notes: r.Notes || "", createdDate: String(r.CreatedDate || todayStr()), lastContactDate: String(r.LastContactDate || ""),
       }));
-      const opportunities = oppRows.map(r => ({
-        id: String(r.OppID || uid("OPP")), orgId: String(r.OrgID || ""), orgName: r.OrgName || "",
-        name: r.Name || "", stage: r.Stage || OPP_STAGES[0], amount: parseFloat(r.Amount) || 0,
-        probability: parseFloat(r.Probability) || 0, expectedCloseDate: String(r.ExpectedCloseDate || ""),
-        source: r.Source || "", notes: r.Notes || "", createdDate: String(r.CreatedDate || todayStr()),
-      }));
+      const opportunities = oppRows.map(r => {
+        const pipeline = r.Pipeline && PIPELINES[r.Pipeline] ? r.Pipeline : "Sales";
+        return {
+          id: String(r.OppID || uid("OPP")), orgId: String(r.OrgID || ""), orgName: r.OrgName || "",
+          pipeline, name: r.Name || "", stage: r.Stage || pipelineOf(pipeline).stages[0], amount: parseFloat(r.Amount) || 0,
+          probability: parseFloat(r.Probability) || 0, expectedCloseDate: String(r.ExpectedCloseDate || ""),
+          source: r.Source || "", notes: r.Notes || "", createdDate: String(r.CreatedDate || todayStr()),
+        };
+      });
       const activities = activityRows.map(r => ({
         id: String(r.ActivityID || uid("ACT")), orgId: String(r.OrgID || ""), contactId: String(r.ContactID || ""),
         oppId: String(r.OppID || ""), type: r.Type || ACTIVITY_TYPES[0], date: String(r.Date || todayStr()),
